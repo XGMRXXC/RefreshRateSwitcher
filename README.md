@@ -1,6 +1,6 @@
 # XiaomiPadFreshRateSwitcher
 
-在小米平板上**通过常驻通知一键切换 / 锁定屏幕刷新率**的 KernelSU 模块 + Root 应用（由 Deepseep v4.1 flash 倾心打造）。
+在小米平板上**通过常驻通知一键切换 / 锁定屏幕刷新率**的 KernelSU 模块 + Root 应用（由 Deepseek v4.1 flash 倾心打造）。
 
 A KernelSU module + root app that switches and locks the display refresh rate from a persistent notification, built for Xiaomi Pad on HyperOS.
 
