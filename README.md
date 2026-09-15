@@ -1,6 +1,6 @@
 # XiaomiPadFreshRateSwitcher
 
-在小米平板（HyperOS / Android 16）上**通过常驻通知一键切换 / 锁定屏幕刷新率**的 KernelSU 模块 + Root 应用。
+在小米平板上**通过常驻通知一键切换 / 锁定屏幕刷新率**的 KernelSU 模块 + Root 应用（由 Deepseep v4.1 flash 倾心打造）。
 
 A KernelSU module + root app that switches and locks the display refresh rate from a persistent notification, built for Xiaomi Pad on HyperOS.
 
@@ -96,8 +96,6 @@ gradle :app:assembleRelease
 
 ### 关于 Material 3 Expressive
 
-KernelSU 官方用的是 `androidx.compose.material3:material3:1.5.0-alpha27`，其 `MaterialExpressiveTheme` / `MotionScheme` / `ShortNavigationBar` 是公开 API；
-本项目固定在 1.4.0（这些 API 在该版本被标记为 internal），因此表达性形态由自绘组件承担：
 
 * `M3eSwitch`：M3 `Switch` + `thumbContent`（开=✓ / 关=✕）+ `SwitchDefaults.colors(...)`
 * `M3eFloatingNav` / `MiuixFloatingNav`：悬浮胶囊底栏
@@ -157,11 +155,6 @@ MIT © 2025 XGMRXXC
 * 选项框改为锚定式（行右侧 ⌃⌄，行下方弹出，当前项高亮 + 对勾）
 * 修复 MIUIX 设置页多出的分割线
 
-### 2.8
-
-* 删除「液态玻璃」底栏
-* 修复悬浮底栏横屏不生效
-* 界面风格 / 底栏样式改为单击弹出选项框
 
 ### 2.7
 
