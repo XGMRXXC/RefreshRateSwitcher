@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">刷新率</string>
+    <string name="channel_name">刷新率控制</string>
+    <string name="channel_desc">常驻通知，用于快速切换与锁定屏幕刷新率</string>
+    <string name="notif_title">屏幕刷新率</string>
+</resources>
