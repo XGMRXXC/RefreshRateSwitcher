@@ -15,10 +15,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.material3.Icon
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Reset
+import top.yukonga.miuix.kmp.icon.extended.Forward
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -70,6 +80,7 @@ fun PanelContent(
     st: AppState,
     modifier: Modifier = Modifier,
     onOpenApp: () -> Unit,
+    onResetPosition: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val view = LocalView.current
@@ -82,7 +93,13 @@ fun PanelContent(
 
     val locked = st.lockEnabled && st.lockedFps > 0
 
-    Card(modifier, cornerRadius = t.cardRadius) {
+    val panelShape = RoundedCornerShape(t.cardRadius)
+    Card(
+        modifier
+            .shadow(16.dp, panelShape)                                    // 投影：与背后内容区分
+            .border(1.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.35f), panelShape),
+        cornerRadius = t.cardRadius,
+    ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             // ---- 标题行：小标题 + 进入应用 ----
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -92,22 +109,27 @@ fun PanelContent(
                     color = MiuixTheme.colorScheme.onBackgroundVariant,
                     modifier = Modifier.weight(1f),
                 )
-                Box(
+                Icon(
+                    imageVector = MiuixIcons.Reset,
+                    contentDescription = "恢复默认位置",
+                    tint = MiuixTheme.colorScheme.onBackgroundVariant,
                     modifier = Modifier
-                        .background(MiuixTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(999.dp))
-                        .clickable {
-                            Haptics.click(view)
-                            onOpenApp()
-                        }
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "进入应用",
-                        fontSize = 11.sp,
-                        color = MiuixTheme.colorScheme.primary,
-                    )
-                }
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable { Haptics.click(view); onResetPosition() }
+                        .padding(7.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector = MiuixIcons.Forward,
+                    contentDescription = "进入应用",
+                    tint = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable { Haptics.click(view); onOpenApp() }
+                        .padding(7.dp),
+                )
             }
 
             // ---- 当前刷新率（大字）+ 锁定状态 ----
@@ -141,7 +163,11 @@ fun PanelContent(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (locked) "已锁定 ${st.lockedFps}Hz" else "未锁定",
+                        text = when {
+                            locked -> "已锁定 ${st.lockedFps}Hz"
+                            st.screen.arr && st.capFps >= 60 -> "最高到 ${st.capFps}Hz"
+                            else -> "未锁定"
+                        },
                         fontSize = 11.sp,
                         color = if (locked) MiuixTheme.colorScheme.onPrimaryContainer
                         else MiuixTheme.colorScheme.onBackgroundVariant,
@@ -163,10 +189,13 @@ fun PanelContent(
                             modifier = Modifier.weight(1f),
                         ) {
                             Haptics.tick(view)
+                            SwitchService.setCapFps(ctx, m.fpsInt())
                             if (SwitchService.isLockEnabled(ctx)) {
                                 SwitchService.lockTo(ctx, m.id, m.fpsInt())
                             } else {
-                                ModeUtil.applyMode(m.id)
+                                if (!ModeUtil.applyMode(ctx, m.id)) {
+                                    toast(ctx, "需要 root 权限")
+                                }
                             }
                             if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
                             asyncRefresh()
@@ -176,6 +205,8 @@ fun PanelContent(
                 }
             }
 
+            // LTPO 屏幕不支持锁定：整块隐藏
+            if (!st.screen.arr) {
             // ---- 锁定开关 ----
             Row(
                 Modifier
@@ -205,9 +236,10 @@ fun PanelContent(
                     },
                 )
             }
+            }
 
             Text(
-                text = "点按面板外空白处关闭",
+                text = rememberForegroundRuleText() + "\n长按面板可拖动位置",
                 fontSize = 10.sp,
                 color = MiuixTheme.colorScheme.onBackgroundVariant,
                 textAlign = TextAlign.Center,
@@ -238,10 +270,32 @@ private fun PanelChip(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = (if (locked) "🔒" else "") + label,
+            text = label,
             color = fg,
             fontSize = 12.sp,
             fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
         )
     }
+
+
+}
+
+/** 悬浮窗底部提示：当前前台应用是否有自动化规则。 */
+@Composable
+private fun rememberForegroundRuleText(): String {
+    val ctx = LocalContext.current
+    var text by remember { mutableStateOf("当前应用不处于自动化设置中") }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val t = withContext(Dispatchers.IO) {
+                val pkg = AutoRules.foregroundPackage()
+                val fps = if (pkg.isNullOrEmpty()) 0 else AutoRules.ruleFps(ctx, pkg)
+                if (fps > 0) "当前应用处于自动化设置中，设置的刷新率为 ${fps}Hz"
+                else "当前应用不处于自动化设置中"
+            }
+            text = t
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+    return text
 }
