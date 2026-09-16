@@ -213,7 +213,7 @@ fun SettingsScreen(st: AppState) {
         // ---------------- 关于 ----------------
         SmallTitle("关于")
         Card(cornerRadius = t.cardRadius) {
-            BasicComponent(title = "版本", summary = "4.2.1.1")
+            BasicComponent(title = "版本", summary = "4.2.1.2")
             BasicComponent(
                 title = "root",
                 summary = when {
