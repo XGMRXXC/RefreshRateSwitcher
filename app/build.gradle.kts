@@ -16,8 +16,8 @@ android {
         applicationId = "com.dsh.refreshswitch"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "2.1"
+        versionCode = 4211
+        versionName = "4.2.1.1"
     }
 
     signingConfigs {
@@ -83,8 +83,12 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 dependencies {
+    // 现代 API（libXposed 102）：编译期依赖，运行时由 LSPosed 提供
+
     implementation("top.yukonga.miuix.kmp:miuix-android:0.8.8")
     implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.8.8")
+    // MIUIX 的 SuperDropdown / 原生 popup 需要它（miuix 未做 api 传递）
+    implementation("org.jetbrains.androidx.navigationevent:navigationevent-compose:1.0.1")
 
     implementation(compose.runtime)
     implementation(compose.foundation)
@@ -121,4 +125,3 @@ configurations.all {
         )
     }
 }
-
