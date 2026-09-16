@@ -18,8 +18,34 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import top.yukonga.miuix.kmp.icon.extended.Lock
+import top.yukonga.miuix.kmp.icon.extended.Unlock
+import androidx.compose.foundation.layout.size
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.offset
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import top.yukonga.miuix.kmp.icon.basic.Check
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -59,58 +85,114 @@ fun HomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
     ) {
         Spacer(Modifier.height(4.dp))
 
-        // ---------- 状态卡 ----------
-        Card(cornerRadius = t.cardRadius) {
-            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp)) {
-                Row(verticalAlignment = Alignment.Bottom) {
+        // ---------- hero 卡：MIUIX 浅绿卡 + 大号水印 + Tilt 3D 按压 ----------
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = t.cardRadius,
+            insideMargin = PaddingValues(0.dp),
+            // 固定绿色（与 InstallerX 那种 MIUIX 绿卡一致，不跟随壁纸取色）
+            colors = CardDefaults.defaultColors(
+                color = HomeHeroGreenContainer,
+                contentColor = HomeHeroGreenContent,
+            ),
+            pressFeedbackType = PressFeedbackType.Tilt,
+            onClick = {
+                Haptics.click(view)
+                if (st.screen.arr) {
+                    toast(ctx, "LTPO 屏不支持锁定")
+                    return@Card
+                }
+                if (st.lockEnabled) {
+                    SwitchService.unlock(ctx)
+                    toast(ctx, "已解锁")
+                } else {
+                    val m = ModeUtil.findByFps(ctx, ModeUtil.currentFps(ctx), 1)
+                    if (m != null) {
+                        SwitchService.lockTo(ctx, m.id, m.fpsInt())
+                        toast(ctx, "已锁定 " + m.shortLabel())
+                    } else {
+                        SwitchService.setLockEnabled(ctx, true)
+                    }
+                }
+                if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
+                asyncRefresh()
+            },
+        ) {
+            Box(Modifier.fillMaxWidth()) {
+                // 大号水印图标（右下，随卡片裁切）
+                Icon(
+                    imageVector = if (st.lockEnabled) MiuixIcons.Lock else MiuixIcons.Unlock,
+                    contentDescription = null,
+                    tint = HomeHeroGreenContent.copy(alpha = 0.26f),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(132.dp)
+                        .offset(x = 26.dp, y = 22.dp),
+                )
+                Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
                     Text(
-                        text = if (st.fps > 0) "${st.fps}" else "—",
-                        fontSize = 46.sp,
+                        text = when {
+                            st.lockEnabled -> "已锁定 " + (if (st.lockedFps > 0) "${st.lockedFps}Hz" else "当前挡位")
+                            st.capFps >= 60 -> "最高到 ${st.capFps}Hz"
+                            st.capFps > 0 -> "已切到 ${st.capFps}Hz"
+                            else -> "未锁定"
+                        },
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.primary,
                     )
+                    Spacer(Modifier.height(2.dp))
                     Text(
-                        text = " Hz",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 8.dp),
+                        text = when {
+                            st.lockEnabled -> "系统改动会被自动纠正"
+                            st.screen.isLtpo -> "已进入 LTPO 刷新率模式（实际 ${st.screen.renderFps}Hz）"
+                            else -> "仅按手动选择的挡位切换"
+                        },
+                        fontSize = 13.sp,
+                        color = HomeHeroGreenContent.copy(alpha = 0.72f),
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = when {
+                            st.lockEnabled -> "持续强制"
+                            st.screen.isLtpo -> "LTPO"
+                            else -> "点击卡片可切换锁定"
+                        },
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = HomeHeroGreenContent.copy(alpha = 0.85f),
                     )
                 }
-                Text(
-                    text = if (st.lockEnabled) {
-                        "已锁定 " + (if (st.lockedFps > 0) "${st.lockedFps} Hz" else "当前挡位") +
-                            " · 系统改动会被自动纠正"
-                    } else {
-                        "未锁定 · 仅按手动选择切换"
-                    },
-                    fontSize = 13.sp,
-                    color = MiuixTheme.colorScheme.onBackgroundVariant,
-                )
             }
-            SuperSwitch(
-                checked = st.lockEnabled,
-                onCheckedChange = { on ->
-                    Haptics.click(view)
-                    if (on) {
-                        val m = ModeUtil.findByFps(ctx, ModeUtil.currentFps(ctx), 1)
-                        if (m != null) {
-                            SwitchService.lockTo(ctx, m.id, m.fpsInt())
-                            toast(ctx, "已锁定 " + m.shortLabel())
-                        } else {
-                            SwitchService.setLockEnabled(ctx, true)
-                        }
-                    } else {
-                        SwitchService.unlock(ctx)
-                        toast(ctx, "已解除锁定")
-                    }
-                    if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
-                    asyncRefresh()
-                },
-                title = "锁定刷新率",
-                summary = "开启后系统或应用改回都会被自动纠正",
+        }
+        Spacer(Modifier.height(12.dp))
+
+        // ---------- 两张统计卡（对应 KernelSU 的「超级用户 / 模块」）----------
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            StatBlock(
+                "当前刷新率",
+                if (st.screen.arr) "由 LTPO 控制"
+                else if (st.fps > 0) "${st.fps} Hz" else "—",
+                t.cardRadius,
+                Modifier.weight(1f),
+            )
+            StatBlock(
+                if (st.lockEnabled && !st.screen.arr) "锁定挡位" else if (st.capFps >= 60) "最高到" else "已选择",
+                if (st.lockEnabled) {
+                    if (st.lockedFps > 0) "${st.lockedFps} Hz" else "—"
+                } else if (st.capFps > 0) "${st.capFps} Hz" else if (st.fps > 0) "${st.fps} Hz" else "—",
+                t.cardRadius,
+                Modifier.weight(1f),
             )
         }
+
+
+
+
+
+        Spacer(Modifier.height(6.dp))
 
         // ---------- 挡位 ----------
         SmallTitle("选择挡位")
@@ -127,19 +209,20 @@ fun HomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
                         rowModes.forEach { m ->
                             ModeChip(
                                 mod = m,
-                                active = st.fps > 0 && m.fpsInt() == st.fps,
+                                active = !st.screen.isLtpo && st.fps > 0 && m.fpsInt() == st.fps,
                                 locked = st.lockEnabled && st.lockedFps > 0 && m.fpsInt() == st.lockedFps,
                                 radius = t.chipRadius,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
                                     Haptics.tick(view)
+                                    SwitchService.setCapFps(ctx, m.fpsInt())
                                     if (SwitchService.isLockEnabled(ctx)) {
                                         SwitchService.lockTo(ctx, m.id, m.fpsInt())
-                                    } else {
-                                        ModeUtil.applyMode(m.id)
+                                    } else if (!ModeUtil.applyMode(ctx, m.id)) {
+                                        toast(ctx, "需要 root 权限")
                                     }
                                     if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
-                                    toast(ctx, "已切换到 " + m.label())
+                                    toast(ctx, "已切到 " + m.label())
                                     asyncRefresh()
                                 },
                             )
@@ -149,9 +232,11 @@ fun HomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
                         }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    text = "点击即切换；若锁定已开启，同时会把它设为锁定目标",
+                    text = if (st.screen.isLtpo && !st.lockEnabled)
+                        "LTPO 动态刷新率中（实际 ${st.screen.renderFps}Hz），挡位高亮暂时隐藏；点任一挡位即可固定"
+                    else "点击即切换；若锁定已开启，同时会把它设为锁定目标",
                     fontSize = 11.5.sp,
                     color = MiuixTheme.colorScheme.onBackgroundVariant,
                     modifier = Modifier.padding(start = 4.dp),
@@ -159,18 +244,20 @@ fun HomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
             }
         }
 
-        // ---------- 快捷操作 ----------
-        SmallTitle("快捷操作")
+        // ---------- 屏幕信息 ----------
+        SmallTitle("屏幕信息")
         Card(cornerRadius = t.cardRadius) {
-            BasicComponent(
-                title = "弹出悬浮面板",
-                summary = "不用离开当前应用即可切换刷新率",
-                onClick = {
-                    Haptics.click(view)
-                    onOpenOverlay()
-                },
-            )
+
+            InfoRow("分辨率", if (st.screen.width > 0) "${st.screen.width} × ${st.screen.height}" else "—")
+            InfoRow("刷新率范围", st.screen.rangeText())
+            InfoRow("当前模式", if (st.screen.modeFps > 0) "${st.screen.modeFps} Hz" else "—")
+            InfoRow("实际渲染", if (st.screen.renderFps > 0) "${st.screen.renderFps} Hz" else "—")
+            InfoRow("面板类型", if (st.screen.arr) "LTPO / 可变刷新率" else "固定刷新率")
+            InfoRow("屏幕密度", if (st.screen.densityDpi > 0) "${st.screen.densityDpi} dpi" else "—")
         }
+
+
+
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -196,7 +283,7 @@ private fun ModeChip(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = (if (locked) "🔒 " else "") + mod.shortLabel(),
+            text = mod.shortLabel(),
             color = fg,
             fontSize = 14.sp,
             fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
@@ -210,3 +297,123 @@ internal fun toast(ctx: Context, s: String) {
     Toast.makeText(ctx, s, Toast.LENGTH_SHORT).show()
 }
 
+/** 统计块：标题 + 数值，居中（对应 KernelSU 首页的两张小卡）。 */
+@Composable
+private fun StatBlock(
+    label: String,
+    value: String,
+    radius: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier, cornerRadius = radius) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onBackgroundVariant,
+            )
+            Text(
+                text = value,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.onSurface,
+            )
+        }
+    }
+
+        Spacer(Modifier.height(24.dp))
+}
+
+/** 主页 hero 卡固定绿色（浅绿底 + 深绿字，与 InstallerX 的 MIUIX 绿卡一致）。 */
+private val HomeHeroGreenContainer = Color(0xFFC9E7CB)
+private val HomeHeroGreenContent = Color(0xFF14532D)
+
+/** 主页「屏幕信息」的键值行。 */
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = MiuixTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = value,
+            fontSize = 14.sp,
+            color = MiuixTheme.colorScheme.onBackgroundVariant,
+        )
+    }
+}
+
+/** 主页「控制屏幕」选择行（仅多屏设备显示）：点开选择要调节的 display。 */
+@Composable
+private fun DisplayPickerRow(st: AppState) {
+    val ctx = LocalContext.current
+    val view = LocalView.current
+    var expanded by remember { mutableStateOf(false) }
+    val current = st.displays.firstOrNull { it.id == st.targetDisplay } ?: st.displays.firstOrNull()
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { Haptics.click(view); expanded = true }
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "控制屏幕",
+            fontSize = 14.sp,
+            color = MiuixTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = current?.label() ?: "—",
+            fontSize = 14.sp,
+            color = MiuixTheme.colorScheme.primary,
+        )
+        MiuixDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            st.displays.forEach { d ->
+                val selected = d.id == st.targetDisplay
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = d.label(),
+                            fontSize = 14.sp,
+                            color = if (selected) MiuixTheme.colorScheme.primary
+                            else MiuixTheme.colorScheme.onSurface,
+                        )
+                    },
+                    trailingIcon = {
+                        if (selected) {
+                            Icon(
+                                imageVector = MiuixIcons.Basic.Check,
+                                contentDescription = null,
+                                tint = MiuixTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    },
+                    onClick = {
+                        Haptics.tick(view)
+                        expanded = false
+                        SwitchService.setTargetDisplay(ctx, d.id)
+                        ScreenInfo.invalidate()
+                        toast(ctx, "已切到 " + d.label())
+                        st.refresh()
+                    },
+                )
+            }
+        }
+    }
+}
