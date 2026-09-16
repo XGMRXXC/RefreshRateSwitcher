@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -65,7 +66,8 @@ fun SettingsScreen(st: AppState) {
         // ---------------- 界面与底栏 ----------------
         SmallTitle("界面")
         Card(cornerRadius = t.cardRadius) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+            // 让 MIUIX 组件自己撑满卡片（自带 insideMargin），否则按压高亮会被内缩、与卡片圆角对不上
+            Column(Modifier.clip(RoundedCornerShape(t.cardRadius))) {
                 MiuixPickerRow(
                     title = "界面风格",
                     value = style.label,
@@ -87,6 +89,23 @@ fun SettingsScreen(st: AppState) {
             }
         }
         // ---------------- 通知 ----------------
+        // ---------------- 自动化 ----------------
+        SmallTitle("自动化")
+        Card(cornerRadius = t.cardRadius) {
+            SuperSwitch(
+                checked = st.autoEnabled,
+                onCheckedChange = { on ->
+                    Haptics.click(view)
+                    AutoRules.setEnabled(ctx, on)
+                    toast(ctx, if (on) "自动化已开" else "自动化已关")
+                    asyncRefresh()
+                },
+                title = "按应用自动切换刷新率",
+                summary = if (st.autoEnabled) "已开启 · 共 ${AutoRules.ruleCount(ctx)} 条规则，底栏显示「自动化」页"
+                else "打开后底栏才会出现「自动化」页",
+            )
+        }
+
         SmallTitle("通知")
         Card(cornerRadius = t.cardRadius) {
             SuperSwitch(
@@ -94,7 +113,7 @@ fun SettingsScreen(st: AppState) {
                 onCheckedChange = { on ->
                     Haptics.click(view)
                     SwitchService.setNotifyEnabled(ctx, on)
-                    toast(ctx, if (on) "已开启常驻通知" else "已关闭常驻通知，改用 root 守护")
+                    toast(ctx, if (on) "通知已开" else "通知已关")
                     asyncRefresh()
                 },
                 title = "常驻通知",
@@ -105,7 +124,7 @@ fun SettingsScreen(st: AppState) {
                 onCheckedChange = { on ->
                     Haptics.click(view)
                     SwitchService.setToastEnabled(ctx, on)
-                    if (on) toast(ctx, "Toast 提示已开启")
+                    if (on) toast(ctx, "提示已开")
                     asyncRefresh()
                 },
                 title = "Toast 提示",
@@ -131,7 +150,7 @@ fun SettingsScreen(st: AppState) {
                 onCheckedChange = { on ->
                     Haptics.click(view)
                     SwitchService.setHideIcon(ctx, on)
-                    toast(ctx, if (on) "桌面图标已隐藏" else "桌面图标已恢复")
+                    toast(ctx, if (on) "图标已隐藏" else "图标已显示")
                     asyncRefresh()
                 },
                 title = "隐藏桌面图标",
@@ -142,7 +161,7 @@ fun SettingsScreen(st: AppState) {
                 onCheckedChange = { on ->
                     Haptics.click(view)
                     SwitchService.setHideRecents(ctx, on)
-                    toast(ctx, if (on) "已不在最近任务中显示" else "已恢复显示在最近任务")
+                    toast(ctx, if (on) "已隐藏后台任务" else "已显示后台任务")
                     asyncRefresh()
                 },
                 title = "隐藏后台任务",
@@ -159,7 +178,7 @@ fun SettingsScreen(st: AppState) {
                 action = if (st.overlayGranted) "已开启" else "去开启",
             ) {
                 if (ModeUtil.hasRoot() && ModeUtil.grantOverlay()) {
-                    toast(ctx, "已通过 root 授予")
+                    toast(ctx, "已授权")
                 } else {
                     SysActions.openOverlaySettings(ctx)
                 }
@@ -186,7 +205,7 @@ fun SettingsScreen(st: AppState) {
                 Haptics.click(view)
                 SwitchService.start(ctx)
                 RestartJobService.schedule(ctx)
-                toast(ctx, "已重新拉起")
+                toast(ctx, "已重启服务")
                 asyncRefresh()
             }
         }
@@ -194,7 +213,7 @@ fun SettingsScreen(st: AppState) {
         // ---------------- 关于 ----------------
         SmallTitle("关于")
         Card(cornerRadius = t.cardRadius) {
-            BasicComponent(title = "版本", summary = "4.0.1")
+            BasicComponent(title = "版本", summary = "4.2.1.1")
             BasicComponent(
                 title = "root",
                 summary = when {
@@ -278,7 +297,7 @@ object SysActions {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(i)
         } catch (t: Throwable) {
-            toast(ctx, "请手动在设置中开启悬浮窗权限")
+            toast(ctx, "需要悬浮窗权限")
         }
     }
 
@@ -291,7 +310,7 @@ object SysActions {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(i)
         } catch (t: Throwable) {
-            toast(ctx, "请手动在系统设置中关闭电池优化")
+            toast(ctx, "请关闭电池优化")
         }
     }
 
@@ -317,7 +336,7 @@ object SysActions {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(i)
         } catch (t: Throwable) {
-            toast(ctx, "请手动在系统设置中开启自启动")
+            toast(ctx, "请开启自启动")
         }
     }
 }
