@@ -1,6 +1,6 @@
 ﻿# RefreshRateSwitcher
 
-小米平板 / 红米 K Pad（`25079RPDCC` / `turner`）与小米 17 Pro 的**刷新率切换器**，
+小米设备 的**刷新率切换器**，
 带 KernelSU 模块（常驻通知 / 点击切换并锁定刷新率），支持按应用自动切换。
 
 ## 功能
