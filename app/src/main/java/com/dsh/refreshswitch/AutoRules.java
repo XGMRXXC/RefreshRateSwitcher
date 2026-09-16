@@ -191,10 +191,16 @@ public final class AutoRules {
             Log.w(ModeUtil.TAG, "auto: no mode for " + fps + "Hz");
             return;
         }
-        SwitchService.lockTo(ctx, m.id, fps);
+        // 触发自动化时**不改变锁定状态**：原本锁定就只改锁定目标，原本未锁定（含 LTPO 设备）
+        // 只切换刷新率，绝不自动开启锁定。
+        if (savedLock) {
+            SwitchService.lockTo(ctx, m.id, fps);
+        } else {
+            ModeUtil.applyMode(ctx, m.id);
+        }
         OverlayPanel.refresh();
         Log.i(ModeUtil.TAG, "auto: " + pkg + " -> " + fps + "Hz (saved " + savedFps + ")");
-        if (allowToast) toast(ctx, "「" + appLabel(ctx, pkg) + "」已自动切到 " + fps + "Hz");
+        if (allowToast) toast(ctx, appLabel(ctx, pkg) + " → " +  + fps + "Hz");
     }
 
     private static void restore(Context ctx, boolean allowToast) {
@@ -215,12 +221,12 @@ public final class AutoRules {
                 SwitchService.lockTo(ctx, m.id, lockFps);
             } else {
                 SwitchService.setLockEnabled(ctx, false);
-                ModeUtil.applyMode(m.id);
+                ModeUtil.applyMode(ctx, m.id);
             }
         }
         OverlayPanel.refresh();
         Log.i(ModeUtil.TAG, "auto: restore after " + from + " -> " + back + "Hz");
-        if (allowToast) toast(ctx, "已退出「" + from + "」，刷新率恢复 " + back + "Hz");
+        if (allowToast) toast(ctx, "已恢复 " + back + "Hz");
     }
 
     private static void reset() {
@@ -248,8 +254,15 @@ public final class AutoRules {
         try {
             PackageManager pm = ctx.getPackageManager();
             android.graphics.drawable.Drawable d = pm.getApplicationIcon(pkg);
-            int w = Math.max(1, d.getIntrinsicWidth());
-            int h = Math.max(1, d.getIntrinsicHeight());
+            // 自适应图标的 intrinsic 尺寸是 -1：必须用固定尺寸兜底，
+            // 否则会画出 1x1 的位图（表现就是「图标不显示」）
+            int w = d.getIntrinsicWidth();
+            int h = d.getIntrinsicHeight();
+            if (w <= 0 || h <= 0) {
+                int px = (int) (48 * ctx.getResources().getDisplayMetrics().density);
+                w = px;
+                h = px;
+            }
             android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
                     w, h, android.graphics.Bitmap.Config.ARGB_8888);
             android.graphics.Canvas canvas = new android.graphics.Canvas(bmp);
