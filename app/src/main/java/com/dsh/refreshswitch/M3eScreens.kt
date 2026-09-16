@@ -53,8 +53,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.Alignment
+import top.yukonga.miuix.kmp.icon.extended.Forward
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -87,6 +89,7 @@ import top.yukonga.miuix.kmp.icon.extended.Reset
 import top.yukonga.miuix.kmp.icon.extended.Settings as SettingsIcon
 import top.yukonga.miuix.kmp.icon.extended.Timer
 import top.yukonga.miuix.kmp.icon.extended.Unlock
+import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.icon.extended.Update
 
 // =====================================================================
@@ -135,12 +138,39 @@ fun M3eCard(
 
 /** hero 主色卡（对应 KSU 的「工作中 / 版本」卡）。 */
 @Composable
-fun M3eHeroCard(title: String, subtitle: String, icon: ImageVector, badge: String? = null) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-    ) {
+fun M3eHeroCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    badge: String? = null,
+    onClick: (() -> Unit)? = null,
+) {
+    val heroModifier = Modifier.fillMaxWidth()
+    val heroShape = MaterialTheme.shapes.large
+    val heroColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+    if (onClick != null) {
+        Card(
+            onClick = onClick,
+            modifier = heroModifier,
+            shape = heroShape,
+            colors = heroColors,
+        ) {
+            M3eHeroBody(title, subtitle, icon, badge)
+        }
+    } else {
+        Card(
+            modifier = heroModifier,
+            shape = heroShape,
+            colors = heroColors,
+        ) {
+            M3eHeroBody(title, subtitle, icon, badge)
+        }
+    }
+}
+
+@Composable
+private fun M3eHeroBody(title: String, subtitle: String, icon: ImageVector, badge: String?) {
+    Column {
         Row(
             Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -186,9 +216,9 @@ fun M3eHeroCard(title: String, subtitle: String, icon: ImageVector, badge: Strin
                     color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
                 )
             }
+            }
         }
     }
-}
 
 /** 统计卡（对应 KSU 的「超级用户 7」）。 */
 @Composable
@@ -472,34 +502,90 @@ fun M3eHomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
         Spacer(Modifier.height(2.dp))
 
         M3eHeroCard(
-            title = if (st.lockEnabled) "已锁定 ${if (st.lockedFps > 0) "${st.lockedFps}Hz" else "当前挡位"}" else "未锁定",
-            subtitle = "当前 ${if (st.fps > 0) "${st.fps} Hz" else "未知"} · 系统改动会被自动纠正",
+            onClick = {
+                Haptics.click(view)
+                if (st.screen.arr) {
+                    toast(ctx, "LTPO 屏不支持锁定")
+                    return@M3eHeroCard
+                }
+                if (st.lockEnabled) {
+                    SwitchService.unlock(ctx)
+                    toast(ctx, "已解锁")
+                } else {
+                    val m = ModeUtil.findByFps(ctx, ModeUtil.currentFps(ctx), 1)
+                    if (m != null) {
+                        SwitchService.lockTo(ctx, m.id, m.fpsInt())
+                        toast(ctx, "已锁定 " + m.shortLabel())
+                    } else {
+                        SwitchService.setLockEnabled(ctx, true)
+                    }
+                }
+                if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
+                refresh()
+            },
+            title = when {
+                st.lockEnabled -> "已锁定 ${if (st.lockedFps > 0) "${st.lockedFps}Hz" else "当前挡位"}"
+                st.capFps >= 60 -> "最高到 ${st.capFps}Hz"
+                st.capFps > 0 -> "已切到 ${st.capFps}Hz"
+                else -> "未锁定"
+            },
+            subtitle = buildString {
+                append("当前 ")
+                append(if (st.fps > 0) "${st.fps} Hz" else "未知")
+                append(" · ")
+                // 只有开启锁定时才会自动纠正系统改动，未锁定时不要这么写
+                append(
+                    when {
+                        st.lockEnabled -> "系统改动会被自动纠正"
+                        st.screen.isLtpo -> "已进入 LTPO 刷新率模式（实际 ${st.screen.renderFps}Hz）"
+                        else -> "未锁定，仅按手动选择的挡位切换"
+                    },
+                )
+            },
             icon = if (st.lockEnabled) MiuixIcons.Lock else MiuixIcons.Unlock,
-            badge = if (st.lockEnabled) "持续强制" else null,
+            badge = when {
+                st.lockEnabled -> "持续强制"
+                st.screen.isLtpo -> "LTPO"
+                else -> null
+            },
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            M3eStatCard("当前刷新率", if (st.fps > 0) "${st.fps} Hz" else "—", Modifier.weight(1f))
-            M3eStatCard("锁定挡位", if (st.lockedFps > 0) "${st.lockedFps} Hz" else "—", Modifier.weight(1f))
+            M3eStatCard(
+                "当前刷新率",
+                if (st.screen.arr) "由 LTPO 控制"
+                else if (st.fps > 0) "${st.fps} Hz" else "—",
+                Modifier.weight(1f),
+            )
+            M3eStatCard(
+                if (st.lockEnabled && !st.screen.arr) "锁定挡位" else if (st.capFps >= 60) "最高到" else "已选择",
+                if (st.lockEnabled) {
+                    if (st.lockedFps > 0) "${st.lockedFps} Hz" else "—"
+                } else if (st.capFps > 0) "${st.capFps} Hz" else if (st.fps > 0) "${st.fps} Hz" else "—",
+                Modifier.weight(1f),
+            )
         }
 
         M3eCard {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                 Text("选择挡位", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(10.dp))
-                val perRow = 4
+                val perRow = 3   // 4 个会把「120Hz」截断，改 3 个
                 st.modes.chunked(perRow).forEachIndexed { idx, rowModes ->
                     if (idx > 0) Spacer(Modifier.height(6.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         rowModes.forEach { m ->
                             FilterChip(
-                                selected = st.fps > 0 && m.fpsInt() == st.fps,
+                                selected = !st.screen.isLtpo && st.fps > 0 && m.fpsInt() == st.fps,
                                 onClick = {
                                     Haptics.tick(view)
+                                    SwitchService.setCapFps(ctx, m.fpsInt())
                                     if (SwitchService.isLockEnabled(ctx)) {
                                         SwitchService.lockTo(ctx, m.id, m.fpsInt())
                                     } else {
-                                        ModeUtil.applyMode(m.id)
+                                        if (!ModeUtil.applyMode(ctx, m.id)) {
+                                            toast(ctx, "需要 root 权限")
+                                        }
                                     }
                                     if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
                                     refresh()
@@ -530,35 +616,15 @@ fun M3eHomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
         }
 
         M3eCard {
-            M3eRow(
-                icon = if (st.lockEnabled) MiuixIcons.Lock else MiuixIcons.Unlock,
-                title = "锁定刷新率",
-                subtitle = "开启后系统或应用改回都会被自动纠正",
-                trailing = {
-                    M3eSwitch(st.lockEnabled, { on ->
-                        Haptics.click(view)
-                        if (on) {
-                            val m = ModeUtil.findByFps(ctx, ModeUtil.currentFps(ctx), 1)
-                            if (m != null) {
-                                SwitchService.lockTo(ctx, m.id, m.fpsInt())
-                                toast(ctx, "已锁定 " + m.shortLabel())
-                            } else SwitchService.setLockEnabled(ctx, true)
-                        } else {
-                            SwitchService.unlock(ctx)
-                            toast(ctx, "已解除锁定")
-                        }
-                        if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
-                        refresh()
-                    })
-                },
-            )
-            M3eRow(
-                icon = MiuixIcons.Layers,
-                title = "弹出悬浮面板",
-                subtitle = "不用离开当前应用即可切换刷新率",
-                onClick = onOpenOverlay,
-            )
+            M3eRow(null, "分辨率", if (st.screen.width > 0) "${st.screen.width} × ${st.screen.height}" else "—")
+            M3eRow(null, "刷新率范围", st.screen.rangeText())
+            M3eRow(null, "当前模式", if (st.screen.modeFps > 0) "${st.screen.modeFps} Hz" else "—")
+            M3eRow(null, "实际渲染", if (st.screen.renderFps > 0) "${st.screen.renderFps} Hz" else "—")
+            M3eRow(null, "面板类型", if (st.screen.arr) "LTPO / 可变刷新率" else "固定刷新率")
+            M3eRow(null, "屏幕密度", if (st.screen.densityDpi > 0) "${st.screen.densityDpi} dpi" else "—")
         }
+
+
 
         Spacer(Modifier.height(96.dp))
     }
@@ -606,6 +672,22 @@ fun M3eSettingsScreen(st: AppState) {
 
         M3eCard {
             M3eRow(
+                icon = MiuixIcons.Tune,
+                title = "自动化",
+                subtitle = if (st.autoEnabled) "已开启 · 共 ${AutoRules.ruleCount(ctx)} 条规则，底栏显示「自动化」页" else "打开后底栏才会出现「自动化」页",
+                trailing = {
+                    M3eSwitch(st.autoEnabled, onCheckedChange = { on ->
+                        Haptics.click(view)
+                        AutoRules.setEnabled(ctx, on)
+                        toast(ctx, if (on) "自动化已开" else "自动化已关")
+                        refresh()
+                    })
+                },
+            )
+        }
+
+        M3eCard {
+            M3eRow(
                 icon = MiuixIcons.Messages,
                 title = "常驻通知",
                 subtitle = "在通知栏显示当前刷新率与快捷挡位按钮",
@@ -613,7 +695,7 @@ fun M3eSettingsScreen(st: AppState) {
                     M3eSwitch(st.notifyEnabled, { on ->
                         Haptics.click(view)
                         SwitchService.setNotifyEnabled(ctx, on)
-                        toast(ctx, if (on) "已开启常驻通知" else "已关闭常驻通知，改用 root 守护")
+                        toast(ctx, if (on) "通知已开" else "通知已关")
                         refresh()
                     })
                 },
@@ -626,7 +708,7 @@ fun M3eSettingsScreen(st: AppState) {
                     M3eSwitch(st.toastEnabled, onCheckedChange = { on ->
                         Haptics.click(view)
                         SwitchService.setToastEnabled(ctx, on)
-                        if (on) toast(ctx, "Toast 提示已开启")
+                        if (on) toast(ctx, "提示已开")
                         refresh()
                     })
                 },
@@ -649,7 +731,7 @@ fun M3eSettingsScreen(st: AppState) {
                     M3eSwitch(st.hideIcon, { on ->
                         Haptics.click(view)
                         SwitchService.setHideIcon(ctx, on)
-                        toast(ctx, if (on) "桌面图标已隐藏" else "桌面图标已恢复")
+                        toast(ctx, if (on) "图标已隐藏" else "图标已显示")
                         refresh()
                     })
                 },
@@ -662,7 +744,7 @@ fun M3eSettingsScreen(st: AppState) {
                     M3eSwitch(st.hideRecents, { on ->
                         Haptics.click(view)
                         SwitchService.setHideRecents(ctx, on)
-                        toast(ctx, if (on) "已不在最近任务中显示" else "已恢复显示在最近任务")
+                        toast(ctx, if (on) "已隐藏后台任务" else "已显示后台任务")
                         refresh()
                     })
                 },
@@ -676,7 +758,7 @@ fun M3eSettingsScreen(st: AppState) {
                 subtitle = if (st.overlayGranted) "已开启，通知点击直接弹出悬浮面板" else "未开启，将降级为对话框面板",
                 trailing = {
                     TextButton(onClick = {
-                        if (ModeUtil.hasRoot() && ModeUtil.grantOverlay()) toast(ctx, "已通过 root 授予")
+                        if (ModeUtil.hasRoot() && ModeUtil.grantOverlay()) toast(ctx, "已授权")
                         else SysActions.openOverlaySettings(ctx)
                         refresh()
                     }) { Text(if (st.overlayGranted) "已开启" else "去开启") }
@@ -712,7 +794,7 @@ fun M3eSettingsScreen(st: AppState) {
                         Haptics.click(view)
                         SwitchService.start(ctx)
                         RestartJobService.schedule(ctx)
-                        toast(ctx, "已重新拉起")
+                        toast(ctx, "已重启服务")
                         refresh()
                     }) { Text("执行") }
                 },
@@ -720,7 +802,7 @@ fun M3eSettingsScreen(st: AppState) {
         }
 
         M3eCard {
-            M3eRow(MiuixIcons.Info, "版本", "4.0.1")
+            M3eRow(MiuixIcons.Info, "版本", "4.2.1.1")
             M3eRow(
                 if (st.root) MiuixIcons.Lock else MiuixIcons.Unlock,
                 "root",
@@ -751,7 +833,7 @@ fun M3eSettingsScreen(st: AppState) {
 
 /** M3E 悬浮面板外壳：全屏透明 + 居中卡片，点空白处关闭。 */
 @Composable
-fun M3ePanelRoot(onClose: () -> Unit, onOpenApp: () -> Unit) {
+fun M3ePanelRoot(onClose: () -> Unit, onOpenApp: () -> Unit, onResetPosition: () -> Unit = {}) {
     val ctx = LocalContext.current
     val st = remember { AppState(ctx) }
     val density = LocalDensity.current
@@ -778,8 +860,10 @@ fun M3ePanelRoot(onClose: () -> Unit, onOpenApp: () -> Unit) {
                 st = st,
                 modifier = Modifier
                     .width(cardWidth)
+                    .shadow(16.dp, RoundedCornerShape(28.dp))
                     .pointerInput(Unit) { detectTapGestures { } },
                 onOpenApp = onOpenApp,
+                onResetPosition = onResetPosition,
             )
         }
     }
@@ -799,6 +883,7 @@ fun M3ePanelContent(
     st: AppState,
     modifier: Modifier = Modifier,
     onOpenApp: () -> Unit,
+    onResetPosition: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val view = LocalView.current
@@ -820,23 +905,27 @@ fun M3ePanelContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
-                Box(
+                Icon(
+                    imageVector = MiuixIcons.Reset,
+                    contentDescription = "恢复默认位置",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(MaterialTheme.colorScheme.secondaryContainer)
-                        .clickable {
-                            Haptics.click(view)
-                            onOpenApp()
-                        }
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "进入应用",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                }
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable { Haptics.click(view); onResetPosition() }
+                        .padding(7.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector = MiuixIcons.Forward,
+                    contentDescription = "进入应用",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable { Haptics.click(view); onOpenApp() }
+                        .padding(7.dp),
+                )
             }
 
             // ---- 当前刷新率（大字）+ 锁定状态 ----
@@ -870,7 +959,11 @@ fun M3ePanelContent(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (locked) "已锁定 ${st.lockedFps}Hz" else "未锁定",
+                        text = when {
+                    locked -> "已锁定 ${st.lockedFps}Hz"
+                    st.screen.arr && st.capFps >= 60 -> "最高到 ${st.capFps}Hz"
+                    else -> "未锁定"
+                },
                         fontSize = 11.sp,
                         color = if (locked) MaterialTheme.colorScheme.onPrimary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -879,19 +972,22 @@ fun M3ePanelContent(
             }
 
             // ---- 挡位 ----
-            val perRow = 4
+            val perRow = 3   // 4 个会把「120Hz」截断，改 3 个
             st.modes.chunked(perRow).forEachIndexed { idx, rowModes ->
                 if (idx > 0) Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     rowModes.forEach { m ->
                         FilterChip(
-                            selected = st.fps > 0 && m.fpsInt() == st.fps,
+                            selected = !st.screen.isLtpo && st.fps > 0 && m.fpsInt() == st.fps,
                             onClick = {
                                 Haptics.tick(view)
+                                SwitchService.setCapFps(ctx, m.fpsInt())
                                 if (SwitchService.isLockEnabled(ctx)) {
                                     SwitchService.lockTo(ctx, m.id, m.fpsInt())
                                 } else {
-                                    ModeUtil.applyMode(m.id)
+                                    if (!ModeUtil.applyMode(ctx, m.id)) {
+                                        toast(ctx, "需要 root 权限")
+                                    }
                                 }
                                 if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
                                 refresh()
@@ -899,7 +995,7 @@ fun M3ePanelContent(
                             label = {
                                 Text(
                                     text = m.shortLabel(),
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     maxLines = 1,
                                     softWrap = false,
                                     textAlign = TextAlign.Center,
@@ -920,6 +1016,8 @@ fun M3ePanelContent(
                     .padding(top = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+            // LTPO 屏幕不支持锁定：整块隐藏
+            if (!st.screen.arr) {
                 Text("锁定刷新率", fontSize = 14.sp, modifier = Modifier.weight(1f))
                 M3eSwitch(locked, onCheckedChange = {
                     Haptics.confirm(view)
@@ -934,9 +1032,10 @@ fun M3ePanelContent(
                     refresh()
                 })
             }
+            }
 
             Text(
-                text = "点按面板外空白处关闭",
+                text = rememberForegroundRuleText() + "\n长按面板可拖动位置",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -946,4 +1045,26 @@ fun M3ePanelContent(
             )
         }
     }
+
+
+}
+
+/** 悬浮窗底部提示：当前前台应用是否有自动化规则。 */
+@Composable
+private fun rememberForegroundRuleText(): String {
+    val ctx = LocalContext.current
+    var text by remember { mutableStateOf("当前应用不处于自动化设置中") }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val t = withContext(Dispatchers.IO) {
+                val pkg = AutoRules.foregroundPackage()
+                val fps = if (pkg.isNullOrEmpty()) 0 else AutoRules.ruleFps(ctx, pkg)
+                if (fps > 0) "当前应用处于自动化设置中，设置的刷新率为 ${fps}Hz"
+                else "当前应用不处于自动化设置中"
+            }
+            text = t
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+    return text
 }
