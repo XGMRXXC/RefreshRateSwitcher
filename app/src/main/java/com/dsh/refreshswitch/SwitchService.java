@@ -15,6 +15,7 @@ import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.widget.Toast;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
@@ -54,6 +55,8 @@ public class SwitchService extends Service {
     private static final String KEY_UI_STYLE = "ui_style";
     private static final String KEY_BOTTOM_BAR = "bottom_bar_style";
     private static final String KEY_TOAST = "toast_enabled";
+    private static final String KEY_DISPLAY = "target_display";
+    private static final String KEY_CAP_FPS = "cap_fps";
 
     private static final long POLL_MS = 1000L;
     private static final int FPS_TOLERANCE = 1;
@@ -101,7 +104,7 @@ public class SwitchService extends Service {
             if (isHideIcon(ctx)) {
                 setHideIcon(ctx, false);
                 try {
-                    android.widget.Toast.makeText(ctx, "已恢复桌面图标：关闭常驻通知后需要保留一个入口",
+                    android.widget.Toast.makeText(ctx, "关闭通知前需保留桌面入口",
                             android.widget.Toast.LENGTH_LONG).show();
                 } catch (Throwable ignored) {}
             }
@@ -160,7 +163,44 @@ public class SwitchService extends Service {
 
     public static void unlock(Context ctx) {
         prefs(ctx).edit().putBoolean(KEY_LOCK, false).apply();
+        // 解除锁定：清掉上限键，交还给系统的自适应
+        try {
+            ModeUtil.clearRefreshRateCap();
+        } catch (Throwable ignored) {
+        }
         Daemon.sync(ctx);
+    }
+
+    /** 未锁定时选择的刷新率上限（= 最高到 N Hz）；-1 表示未设置。 */
+    public static int getCapFps(Context ctx) { return prefs(ctx).getInt(KEY_CAP_FPS, -1); }
+
+    public static void setCapFps(Context ctx, int fps) {
+        prefs(ctx).edit().putInt(KEY_CAP_FPS, fps).apply();
+    }
+
+    /** 悬浮面板相对屏幕左上角的偏移（竖屏/横屏分别记忆）。 */
+    public static int[] getPanelOffsetPx(Context ctx, boolean landscape) {
+        String key = landscape ? "panel_off_land" : "panel_off_port";
+        String v = prefs(ctx).getString(key, "0,0");
+        try {
+            String[] p = v.split(",");
+            return new int[]{Integer.parseInt(p[0].trim()), Integer.parseInt(p[1].trim())};
+        } catch (Throwable t) {
+            return new int[]{0, 0};
+        }
+    }
+
+    public static void setPanelOffsetPx(Context ctx, boolean landscape, int x, int y) {
+        String key = landscape ? "panel_off_land" : "panel_off_port";
+        prefs(ctx).edit().putString(key, x + "," + y).apply();
+    }
+    /** 要调节的屏幕 id（默认主屏 display 0）。 */
+    public static int getTargetDisplay(Context ctx) {
+        return prefs(ctx).getInt(KEY_DISPLAY, android.view.Display.DEFAULT_DISPLAY);
+    }
+
+    public static void setTargetDisplay(Context ctx, int id) {
+        prefs(ctx).edit().putInt(KEY_DISPLAY, id).apply();
     }
 
     /** 全部 toast 提示的总开关（默认开）。 */
@@ -281,7 +321,7 @@ public class SwitchService extends Service {
             if (id >= 0) {
                 ModeUtil.Mode m = ModeUtil.findById(ModeUtil.listModes(this), id);
                 if (m != null) lockTo(this, id, m.fpsInt());
-                else ModeUtil.applyMode(id);
+                else ModeUtil.applyMode(this, id);
                 OverlayPanel.refresh();
             }
         } else if (ACTION_TOGGLE_LOCK.equals(action)) {
@@ -310,14 +350,8 @@ public class SwitchService extends Service {
             ModeUtil.grantOverlay();
             if (OverlayPanel.show(this)) return;
         }
-        try {
-            Intent i = new Intent(this, PanelActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
-            startActivity(i);
-        } catch (Throwable t) {
-            Log.e(ModeUtil.TAG, "panel fallback failed", t);
-        }
+        // 悬浮窗不可用（未授权）时只提示；不再回退到独立 Activity 面板，避免出现第二套面板
+        Toast.makeText(this, "需要悬浮窗权限", Toast.LENGTH_SHORT).show();
     }
 
     /** App 被从最近任务划掉时：安排一次快速重启（配合自启动权限）。 */
@@ -407,7 +441,7 @@ public class SwitchService extends Service {
         if (now - lastApplyAt < 300) return false;
         lastApplyAt = now;
         Log.i(ModeUtil.TAG, "lock enforce: real=" + real + " locked=" + lfps + " -> modeId " + target.id);
-        ModeUtil.applyMode(target.id);
+        ModeUtil.applyMode(this, target.id);
         OverlayPanel.refresh();
         return true;
     }
@@ -435,6 +469,15 @@ public class SwitchService extends Service {
         ticker = new Runnable() {
             @Override public void run() {
                 try { AutoRules.tick(SwitchService.this, true); } catch (Throwable t) { Log.e(ModeUtil.TAG, "auto tick failed", t); }
+                // LTPO 屏幕不支持锁定刷新率：检测到就自动解除，避免留下无效的锁定状态
+                try {
+                    if (ScreenInfo.read(SwitchService.this).isLtpo() && SwitchService.isLockEnabled(SwitchService.this)) {
+                        Log.i(ModeUtil.TAG, "LTPO detected -> auto unlock");
+                        SwitchService.unlock(SwitchService.this);
+                    }
+                } catch (Throwable t) {
+                    Log.e(ModeUtil.TAG, "ltpo auto unlock failed", t);
+                }
                 enforceLock();
                 notifyNow(false);
                 if (OverlayPanel.isShowing()) OverlayPanel.refresh();
