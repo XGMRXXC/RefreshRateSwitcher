@@ -53,6 +53,7 @@ public class SwitchService extends Service {
     private static final String KEY_NOTIFY = "notify_enabled";
     private static final String KEY_UI_STYLE = "ui_style";
     private static final String KEY_BOTTOM_BAR = "bottom_bar_style";
+    private static final String KEY_TOAST = "toast_enabled";
 
     private static final long POLL_MS = 1000L;
     private static final int FPS_TOLERANCE = 1;
@@ -162,7 +163,14 @@ public class SwitchService extends Service {
         Daemon.sync(ctx);
     }
 
-    private static SharedPreferences prefs(Context ctx) {
+    /** 全部 toast 提示的总开关（默认开）。 */
+    public static boolean isToastEnabled(Context ctx) { return prefs(ctx).getBoolean(KEY_TOAST, true); }
+
+    public static void setToastEnabled(Context ctx, boolean on) {
+        prefs(ctx).edit().putBoolean(KEY_TOAST, on).apply();
+    }
+
+    static SharedPreferences prefs(Context ctx) {
         return ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
@@ -426,6 +434,7 @@ public class SwitchService extends Service {
     private void scheduleTicker() {
         ticker = new Runnable() {
             @Override public void run() {
+                try { AutoRules.tick(SwitchService.this, true); } catch (Throwable t) { Log.e(ModeUtil.TAG, "auto tick failed", t); }
                 enforceLock();
                 notifyNow(false);
                 if (OverlayPanel.isShowing()) OverlayPanel.refresh();

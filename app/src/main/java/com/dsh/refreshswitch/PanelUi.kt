@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Switch as MiuixSwitch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -69,7 +70,6 @@ fun PanelContent(
     st: AppState,
     modifier: Modifier = Modifier,
     onOpenApp: () -> Unit,
-    onOpenSystemSettings: () -> Unit,
 ) {
     val ctx = LocalContext.current
     val view = LocalView.current
@@ -80,53 +80,85 @@ fun PanelContent(
         scope.launch { withContext(Dispatchers.IO) { st.refresh() } }
     }
 
+    val locked = st.lockEnabled && st.lockedFps > 0
+
     Card(modifier, cornerRadius = t.cardRadius) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-            // ---- 标题行：标题 + 进入 App ----
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            // ---- 标题行：小标题 + 进入应用 ----
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "刷新率",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onBackgroundVariant,
                     modifier = Modifier.weight(1f),
                 )
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
-                        .background(MiuixTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                        .background(MiuixTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(999.dp))
                         .clickable {
                             Haptics.click(view)
                             onOpenApp()
-                        },
+                        }
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(text = "⚙", fontSize = 13.sp)
+                    Text(
+                        text = "进入应用",
+                        fontSize = 11.sp,
+                        color = MiuixTheme.colorScheme.primary,
+                    )
                 }
             }
 
-            // ---- 当前值 ----
-            Text(
-                text = buildString {
-                    append("当前 ")
-                    append(if (st.fps > 0) "${st.fps} Hz" else "未知")
-                    append("   ·   ")
-                    if (st.lockEnabled && st.lockedFps > 0) append("🔒 ${st.lockedFps}Hz") else append("未锁定")
-                },
-                fontSize = 11.sp,
-                color = MiuixTheme.colorScheme.onBackgroundVariant,
-                modifier = Modifier.padding(top = 3.dp, bottom = 8.dp),
-            )
+            // ---- 当前刷新率（大字）+ 锁定状态 ----
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (st.fps > 0) "${st.fps}" else "--",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.primary,
+                )
+                Text(
+                    text = " Hz",
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onBackgroundVariant,
+                    modifier = Modifier.padding(start = 2.dp, bottom = 4.dp),
+                )
+                Spacer(Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (locked) MiuixTheme.colorScheme.primaryContainer
+                            else MiuixTheme.colorScheme.surfaceContainerHigh,
+                            RoundedCornerShape(999.dp),
+                        )
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (locked) "已锁定 ${st.lockedFps}Hz" else "未锁定",
+                        fontSize = 11.sp,
+                        color = if (locked) MiuixTheme.colorScheme.onPrimaryContainer
+                        else MiuixTheme.colorScheme.onBackgroundVariant,
+                    )
+                }
+            }
 
             // ---- 挡位 ----
             val perRow = 4
             st.modes.chunked(perRow).forEachIndexed { rowIndex, rowModes ->
-                if (rowIndex > 0) Spacer(Modifier.height(6.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (rowIndex > 0) Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     rowModes.forEach { m ->
                         PanelChip(
                             label = m.shortLabel(),
                             active = st.fps > 0 && m.fpsInt() == st.fps,
-                            locked = st.lockEnabled && st.lockedFps > 0 && m.fpsInt() == st.lockedFps,
+                            locked = locked && m.fpsInt() == st.lockedFps,
                             radius = t.chipRadius,
                             modifier = Modifier.weight(1f),
                         ) {
@@ -144,67 +176,33 @@ fun PanelContent(
                 }
             }
 
-            // ---- 锁定行 ----
+            // ---- 锁定开关 ----
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = 10.dp),
+                    .padding(top = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = "锁定刷新率",
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     modifier = Modifier.weight(1f),
                 )
-                val locked = st.lockEnabled && st.lockedFps > 0
-                Box(
-                    modifier = Modifier
-                        .background(
-                            if (locked) MiuixTheme.colorScheme.primary
-                            else MiuixTheme.colorScheme.surfaceContainerHigh,
-                            RoundedCornerShape(999.dp),
-                        )
-                        .clickable {
-                            Haptics.confirm(view)
-                            if (SwitchService.isLockEnabled(ctx)) {
-                                SwitchService.unlock(ctx)
-                            } else {
-                                val m = ModeUtil.findByFps(ctx, ModeUtil.currentFps(ctx), 1)
-                                if (m != null) SwitchService.lockTo(ctx, m.id, m.fpsInt())
-                                else SwitchService.setLockEnabled(ctx, true)
-                            }
-                            if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
-                            asyncRefresh()
+                // 与主题一致的 MIUIX 原生开关
+                MiuixSwitch(
+                    checked = locked,
+                    onCheckedChange = { _ ->
+                        Haptics.confirm(view)
+                        if (SwitchService.isLockEnabled(ctx)) {
+                            SwitchService.unlock(ctx)
+                        } else {
+                            val m = ModeUtil.findByFps(ctx, ModeUtil.currentFps(ctx), 1)
+                            if (m != null) SwitchService.lockTo(ctx, m.id, m.fpsInt())
+                            else SwitchService.setLockEnabled(ctx, true)
                         }
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = if (locked) "已开启" else "已关闭",
-                        fontSize = 11.sp,
-                        color = if (locked) MiuixTheme.colorScheme.onPrimary
-                        else MiuixTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-
-            // ---- 系统设置 ----
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-                    .background(MiuixTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(999.dp))
-                    .clickable {
-                        Haptics.click(view)
-                        onOpenSystemSettings()
-                    }
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "系统设置",
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.primary,
+                        if (!SwitchService.isNotifyEnabled(ctx)) Daemon.sync(ctx)
+                        asyncRefresh()
+                    },
                 )
             }
 
@@ -215,12 +213,11 @@ fun PanelContent(
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
+                    .padding(top = 12.dp),
             )
         }
     }
 }
-
 @Composable
 private fun PanelChip(
     label: String,

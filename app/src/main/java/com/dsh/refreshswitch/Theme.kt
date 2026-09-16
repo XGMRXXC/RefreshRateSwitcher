@@ -3,6 +3,7 @@ package com.dsh.refreshswitch
 import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -77,7 +78,15 @@ fun M3eTheme(content: @Composable () -> Unit) {
     }
     // 注：MaterialExpressiveTheme 需要 material3 1.5.0-alpha+（KernelSU 用的版本），
     // 本项目固定在 1.4.0（该 API 为 internal），表达性形态由 M3eSwitch 等自绘组件承担。
-    MaterialTheme(colorScheme = scheme) { content() }
+    MaterialTheme(colorScheme = scheme) {
+        // M3E 的容器是 Box(background(...))，不像 Scaffold/Surface 会自动设置内容色，
+        // 不显式提供的话 LocalContentColor 保持默认黑色 → 深色模式下文字发黑。
+        CompositionLocalProvider(
+            LocalContentColor provides scheme.onBackground,
+        ) {
+            content()
+        }
+    }
 }
 
 /**

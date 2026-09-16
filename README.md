@@ -5,7 +5,7 @@
 A KernelSU module + root app that switches and locks the display refresh rate from a persistent notification, built for Xiaomi Pad on HyperOS.
 
 * 包名 / Package: `com.dsh.refreshswitch`
-* 当前版本 / Version: **3.3**
+* 当前版本 / Version: **4.0.1**
 * UI：**MIUIX**（HyperOS 组件与配色）与 **M3E**（Material 3 Expressive / Material You）两套完全独立的界面
 
 ---
@@ -26,10 +26,19 @@ A KernelSU module + root app that switches and locks the display refresh rate fr
 * 面板点空白处关闭；面板右上角可进入 APP 本体
 * 可关闭常驻通知，改用 **root 守护进程**（不占用通知栏）
 
+### 自动化（4.0 新增）
+
+* 独立「自动化」页（主页 ↔ 自动化 ↔ 设置 三页，可左右滑动切换）
+* **总开关**：关闭时下方设置全部变灰不可点
+* 监测前台应用（root 读 `dumpsys activity activities`），按应用配置：打开该应用自动切到指定刷新率，退出自动恢复原值
+* 每个应用一行：**图标 + 应用名 + 包名 + 当前规则**，点 `⌃⌄` 选择挡位；已配规则的应用置顶并按刷新率从高到低排列
+* 应用列表通过 root 读取（`pm list packages`），可切换是否显示系统应用
+* 进入 / 退出 / 修改规则都有 toast 提示（可在设置里一键关闭全部 toast）
+
 ### 界面
 
 * **双风格**：MIUIX 与 M3E，设置页可切换
-* 主页 ↔ 设置支持**左右滑动切换**，也支持点击导航项
+* 主页 ↔ 自动化 ↔ 设置支持**左右滑动切换**，也支持点击导航项
 * 底栏样式可选：**标准（贴地）** / **悬浮底栏**（横竖屏均生效，横屏自动竖排到左侧）
 * 横屏自动把导航栏移到左侧
 * 状态栏 / 导航栏图标深浅色自动反色
@@ -129,6 +138,21 @@ MIT © 2025 XGMRXXC
 ---
 
 ## 更新日志
+
+### 4.0.1
+
+* M3E 自动化行去掉上下箭头，与设置页选项行一致；已配置规则的应用置顶并按刷新率从高到低
+* MIUIX：选项框改用 Compose 自带 `DropdownMenu`（不再手绘），从最右侧弹出；整条应用行可点；展开时该行整条变灰
+* M3E 选项框按手指点击位置弹出
+* 应用行显示图标 + 应用名 + 包名
+* 设置页新增「Toast 提示」总开关，可一键关闭全程序 toast
+* MIUIX 悬浮窗的锁定开关改用 MIUIX 原生 `Switch`
+* 删除主页与悬浮窗里的「进入系统设置」入口；设置页删去主题描述文本
+* 修复深色模式下 M3E 文字发黑；修复 MIUIX 标题栏偏低、横屏侧栏被截断；修复 M3E 横屏侧栏与状态栏颜色不一致
+
+### 4.0
+
+* 新增「自动化」页：总开关 + 按应用自动切换刷新率（前台监测、规则持久化、进入/退出 toast、系统应用可见开关）
 
 ### 3.3
 

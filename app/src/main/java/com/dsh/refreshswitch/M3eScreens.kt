@@ -50,6 +50,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -224,14 +226,16 @@ fun M3eRow(
     title: String,
     subtitle: String? = null,
     trailing: (@Composable () -> Unit)? = null,
+    enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
 ) {
     val view = LocalView.current
+    val alpha = if (enabled) 1f else 0.38f
     Row(
         Modifier
             .fillMaxWidth()
             .then(
-                if (onClick != null) {
+                if (onClick != null && enabled) {
                     Modifier.clickable {
                         Haptics.click(view)
                         onClick()
@@ -247,15 +251,25 @@ fun M3eRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
                 modifier = Modifier.size(24.dp),
             )
             Spacer(Modifier.width(16.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text(
+                title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+            )
             if (subtitle != null) {
-                Text(subtitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    subtitle,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                    maxLines = 1,
+                )
             }
         }
         if (trailing != null) {
@@ -277,18 +291,28 @@ fun M3ePickerRow(
     onPick: (Int) -> Unit,
 ) {
     val view = LocalView.current
+    val density = LocalDensity.current
     var expanded by remember { mutableStateOf(false) }
+    var tapX by remember { mutableFloatStateOf(0f) }
 
-    Box {
+    Box(
+        Modifier.pointerInput(Unit) {
+            detectTapGestures { offset ->
+                tapX = offset.x
+                Haptics.click(view)
+                expanded = true
+            }
+        },
+    ) {
         M3eRow(
             icon = null,
             title = title,
             subtitle = value,
-            onClick = { expanded = !expanded },
         )
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
+            offset = DpOffset(with(density) { tapX.toDp() }, 0.dp),
         ) {
             options.forEachIndexed { index, label ->
                 val selected = index == selectedIndex
@@ -327,10 +351,12 @@ fun M3eSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Switch(
         checked = checked,
         onCheckedChange = onCheckedChange,
+        enabled = enabled,
         modifier = modifier,
         thumbContent = {
             Icon(
@@ -532,12 +558,6 @@ fun M3eHomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
                 subtitle = "不用离开当前应用即可切换刷新率",
                 onClick = onOpenOverlay,
             )
-            M3eRow(
-                icon = MiuixIcons.SettingsIcon,
-                title = "系统刷新率设置",
-                subtitle = "打开小米原生的刷新率选择页面",
-                onClick = { OverlayPanel.openSystemSettings(ctx) },
-            )
         }
 
         Spacer(Modifier.height(96.dp))
@@ -585,16 +605,6 @@ fun M3eSettingsScreen(st: AppState) {
         }
 
         M3eCard {
-            Text(
-                text = "MIUIX：HyperOS 组件与配色；M3E：Material 3 Expressive（Material You 动态取色）。" +
-                    "底栏「标准」为贴底导航栏，「悬浮底栏」为浮在内容之上的胶囊。",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-            )
-        }
-
-        M3eCard {
             M3eRow(
                 icon = MiuixIcons.Messages,
                 title = "常驻通知",
@@ -604,6 +614,19 @@ fun M3eSettingsScreen(st: AppState) {
                         Haptics.click(view)
                         SwitchService.setNotifyEnabled(ctx, on)
                         toast(ctx, if (on) "已开启常驻通知" else "已关闭常驻通知，改用 root 守护")
+                        refresh()
+                    })
+                },
+            )
+            M3eRow(
+                icon = MiuixIcons.Messages,
+                title = "Toast 提示",
+                subtitle = if (st.toastEnabled) "显示全部操作提示" else "已关闭，所有 toast 都不再弹出",
+                trailing = {
+                    M3eSwitch(st.toastEnabled, onCheckedChange = { on ->
+                        Haptics.click(view)
+                        SwitchService.setToastEnabled(ctx, on)
+                        if (on) toast(ctx, "Toast 提示已开启")
                         refresh()
                     })
                 },
@@ -697,7 +720,7 @@ fun M3eSettingsScreen(st: AppState) {
         }
 
         M3eCard {
-            M3eRow(MiuixIcons.Info, "版本", "3.3")
+            M3eRow(MiuixIcons.Info, "版本", "4.0.1")
             M3eRow(
                 if (st.root) MiuixIcons.Lock else MiuixIcons.Unlock,
                 "root",
@@ -757,7 +780,6 @@ fun M3ePanelRoot(onClose: () -> Unit, onOpenApp: () -> Unit) {
                     .width(cardWidth)
                     .pointerInput(Unit) { detectTapGestures { } },
                 onOpenApp = onOpenApp,
-                onOpenSystemSettings = { OverlayPanel.openSystemSettings(ctx) },
             )
         }
     }
@@ -777,11 +799,11 @@ fun M3ePanelContent(
     st: AppState,
     modifier: Modifier = Modifier,
     onOpenApp: () -> Unit,
-    onOpenSystemSettings: () -> Unit,
 ) {
     val ctx = LocalContext.current
     val view = LocalView.current
     val refresh = m3eAsyncRefresh(st)
+    val locked = st.lockEnabled && st.lockedFps > 0
 
     Surface(
         modifier = modifier,
@@ -789,56 +811,78 @@ fun M3ePanelContent(
         shape = RoundedCornerShape(24.dp),
         shadowElevation = 8.dp,
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            // ---- 标题行：小标题 + 进入应用 ----
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (st.lockEnabled) MiuixIcons.Lock else MiuixIcons.Unlock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp),
-                )
-                Spacer(Modifier.width(8.dp))
                 Text(
                     text = "刷新率",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
+                        .clip(RoundedCornerShape(999.dp))
                         .background(MaterialTheme.colorScheme.secondaryContainer)
                         .clickable {
                             Haptics.click(view)
                             onOpenApp()
-                        },
+                        }
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = MiuixIcons.SettingsIcon,
-                        contentDescription = "进入应用",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(16.dp),
+                    Text(
+                        text = "进入应用",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                 }
             }
-            Text(
-                text = buildString {
-                    append("当前 ")
-                    append(if (st.fps > 0) "${st.fps} Hz" else "未知")
-                    append("   ·   ")
-                    if (st.lockEnabled && st.lockedFps > 0) append("🔒 ${st.lockedFps}Hz") else append("未锁定")
-                },
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
-            )
 
+            // ---- 当前刷新率（大字）+ 锁定状态 ----
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (st.fps > 0) "${st.fps}" else "--",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = " Hz",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 2.dp, bottom = 4.dp),
+                )
+                Spacer(Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(
+                            if (locked) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        )
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (locked) "已锁定 ${st.lockedFps}Hz" else "未锁定",
+                        fontSize = 11.sp,
+                        color = if (locked) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            // ---- 挡位 ----
             val perRow = 4
             st.modes.chunked(perRow).forEachIndexed { idx, rowModes ->
-                if (idx > 0) Spacer(Modifier.height(6.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (idx > 0) Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     rowModes.forEach { m ->
                         FilterChip(
                             selected = st.fps > 0 && m.fpsInt() == st.fps,
@@ -869,17 +913,15 @@ fun M3ePanelContent(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (st.lockEnabled) MiuixIcons.Lock else MiuixIcons.Unlock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(8.dp))
+            // ---- 锁定开关 ----
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text("锁定刷新率", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                M3eSwitch(st.lockEnabled && st.lockedFps > 0, onCheckedChange = {
+                M3eSwitch(locked, onCheckedChange = {
                     Haptics.confirm(view)
                     if (SwitchService.isLockEnabled(ctx)) {
                         SwitchService.unlock(ctx)
@@ -893,22 +935,14 @@ fun M3ePanelContent(
                 })
             }
 
-            Spacer(Modifier.height(10.dp))
-            TextButton(
-                onClick = {
-                    Haptics.click(view)
-                    onOpenSystemSettings()
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("系统设置", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-            }
             Text(
                 text = "点按面板外空白处关闭",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
             )
         }
     }

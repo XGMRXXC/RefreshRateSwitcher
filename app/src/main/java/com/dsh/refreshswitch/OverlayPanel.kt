@@ -206,7 +206,6 @@ private fun PanelRoot(onClose: () -> Unit, onOpenApp: () -> Unit) {
                     .width(cardWidth)
                     .pointerInput(Unit) { detectTapGestures { /* 吞掉卡片内的空白点击 */ } },
                 onOpenApp = onOpenApp,
-                onOpenSystemSettings = { OverlayPanel.openSystemSettings(ctx) },
             )
         }
     }

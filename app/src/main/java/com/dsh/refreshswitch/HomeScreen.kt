@@ -170,14 +170,6 @@ fun HomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
                     onOpenOverlay()
                 },
             )
-            BasicComponent(
-                title = "系统刷新率设置",
-                summary = "打开小米原生的刷新率选择页面",
-                onClick = {
-                    Haptics.click(view)
-                    OverlayPanel.openSystemSettings(ctx)
-                },
-            )
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -214,5 +206,7 @@ private fun ModeChip(
 }
 
 internal fun toast(ctx: Context, s: String) {
+    if (!SwitchService.isToastEnabled(ctx)) return
     Toast.makeText(ctx, s, Toast.LENGTH_SHORT).show()
 }
+

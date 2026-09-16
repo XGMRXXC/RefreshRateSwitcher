@@ -52,6 +52,7 @@ import top.yukonga.miuix.kmp.basic.SmallTopAppBar as MiuixSmallTopAppBar
 import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 应用外壳：按风格分别使用 MIUIX 或 Material3 组件；横屏时底栏自动移到左侧导航栏。 */
@@ -134,18 +135,27 @@ private fun TabPager(
 private fun MiuixShell(st: AppState) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pager = rememberTabPager(2)
+    val pager = rememberTabPager(3)
     val tab = pager.currentPage
     val wide = isWideScreen()
-    val title = if (tab == 0) "刷新率" else "设置"
+    val title = when (tab) {
+        0 -> "刷新率"
+        1 -> "自动化"
+        else -> "设置"
+    }
     val openOverlay: () -> Unit = {
         if (!OverlayPanel.show(ctx)) toast(ctx, "请先授予悬浮窗权限")
     }
     val page: @Composable (Int) -> Unit = { t ->
-        if (t == 0) HomeScreen(st, openOverlay) else SettingsScreen(st)
+        when (t) {
+            0 -> HomeScreen(st, openOverlay)
+            1 -> MiuixAutomationScreen(st)
+            else -> SettingsScreen(st)
+        }
     }
     val navItems = listOf(
         HomeIcon to "主页",
+        MiuixIcons.Tune to "自动化",
         MiuixIcons.Settings to "设置",
     )
     val go: (Int) -> Unit = { i -> scope.launch { pager.animateScrollToPage(i) } }
@@ -231,18 +241,30 @@ private fun MiuixShell(st: AppState) {
 private fun M3eShell(st: AppState) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pager = rememberTabPager(2)
+    val pager = rememberTabPager(3)
     val tab = pager.currentPage
     val wide = isWideScreen()
-    val title = if (tab == 0) "刷新率" else "设置"
-    val pageIcon = if (tab == 0) HomeIcon else MiuixIcons.Settings
+    val title = when (tab) {
+        0 -> "刷新率"
+        1 -> "自动化"
+        else -> "设置"
+    }
+    val pageIcon = when (tab) {
+        0 -> HomeIcon
+        1 -> MiuixIcons.Tune
+        else -> MiuixIcons.Settings
+    }
     val openOverlay: () -> Unit = {
         if (!OverlayPanel.show(ctx)) toast(ctx, "请先授予悬浮窗权限")
     }
     val page: @Composable (Int) -> Unit = { t ->
-        if (t == 0) M3eHomeScreen(st, openOverlay) else M3eSettingsScreen(st)
+        when (t) {
+            0 -> M3eHomeScreen(st, openOverlay)
+            1 -> M3eAutomationScreen(st)
+            else -> M3eSettingsScreen(st)
+        }
     }
-    val navItems = listOf(HomeIcon to "主页", MiuixIcons.Settings to "设置")
+    val navItems = listOf(HomeIcon to "主页", MiuixIcons.Tune to "自动化", MiuixIcons.Settings to "设置")
     val go: (Int) -> Unit = { i -> scope.launch { pager.animateScrollToPage(i) } }
 
     val floating = st.bottomBarStyle == BarStyle.FLOATING

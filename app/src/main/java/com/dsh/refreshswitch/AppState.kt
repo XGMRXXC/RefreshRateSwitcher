@@ -18,6 +18,9 @@ class AppState(private val ctx: Context) {
     var hideRecents by mutableStateOf(SwitchService.isHideRecents(ctx))
     var notifyEnabled by mutableStateOf(SwitchService.isNotifyEnabled(ctx))
     var bottomBarStyle by mutableIntStateOf(SwitchService.getBottomBarStyle(ctx))
+    var autoEnabled by mutableStateOf(AutoRules.isEnabled(ctx))
+    var autoShowSystem by mutableStateOf(AutoRules.isShowSystem(ctx))
+    var toastEnabled by mutableStateOf(SwitchService.isToastEnabled(ctx))
     var daemonPid by mutableIntStateOf(-1)
     var modes by mutableStateOf(ModeUtil.listModes(ctx))
     var overlayGranted by mutableStateOf(OverlayPanel.canShow(ctx))
@@ -41,6 +44,12 @@ class AppState(private val ctx: Context) {
         if (ne != notifyEnabled) notifyEnabled = ne
         val bs = SwitchService.getBottomBarStyle(ctx)
         if (bs != bottomBarStyle) bottomBarStyle = bs
+        val ae = AutoRules.isEnabled(ctx)
+        if (ae != autoEnabled) autoEnabled = ae
+        val asys = AutoRules.isShowSystem(ctx)
+        if (asys != autoShowSystem) autoShowSystem = asys
+        val te = SwitchService.isToastEnabled(ctx)
+        if (te != toastEnabled) toastEnabled = te
         val ov = OverlayPanel.canShow(ctx)
         if (ov != overlayGranted) overlayGranted = ov
 

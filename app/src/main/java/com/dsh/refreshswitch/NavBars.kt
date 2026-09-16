@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -129,8 +130,8 @@ private fun MiuixNavPill(
 }
 
 /**
- * MIUIX 单选行：单击在**行正下方**弹出 MIUIX 主题的选项框。
- * 位置按行实测高度定位（不写死），弹出时带轻微缩放入场；当前项高亮 + 对勾。
+ * MIUIX 单选行：右侧 ⌃⌄，点击用 Compose 自带的 DropdownMenu 弹出，
+ * 菜单锚定在行**最右侧**（从右边展开）。
  */
 @Composable
 fun MiuixPickerRow(
@@ -142,103 +143,74 @@ fun MiuixPickerRow(
 ) {
     val view = LocalView.current
     var expanded by remember { mutableStateOf(false) }
-    var rowHeight by remember { mutableIntStateOf(0) }
 
-    Box(
+    Row(
         Modifier
             .fillMaxWidth()
-            .onGloballyPositioned { rowHeight = it.size.height },
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clickable {
-                    Haptics.click(view)
-                    expanded = !expanded
-                }
-                .padding(vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = title,
-                fontSize = 16.sp,
-                color = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = value,
-                fontSize = 14.sp,
-                color = MiuixTheme.colorScheme.onBackgroundVariant,
-            )
-            Spacer(Modifier.width(4.dp))
-            Icon(
-                imageVector = MiuixIcons.Basic.ArrowUpDown,
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.onBackgroundVariant,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-
-        if (expanded && rowHeight > 0) {
-            Popup(
-                alignment = Alignment.TopStart,
-                offset = IntOffset(0, rowHeight + 4),
-                onDismissRequest = { expanded = false },
-                properties = PopupProperties(focusable = true),
-            ) {
-                var shown by remember { mutableStateOf(false) }
-                LaunchedEffect(Unit) { shown = true }
-                AnimatedVisibility(
-                    visible = shown,
-                    enter = fadeIn(tween(130)) + scaleIn(
-                        animationSpec = tween(180),
-                        initialScale = 0.92f,
-                        transformOrigin = TransformOrigin(0f, 0f),
-                    ),
-                ) {
-                    Column(
-                        Modifier
-                            .shadow(10.dp, RoundedCornerShape(18.dp))
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(MiuixTheme.colorScheme.surface)
-                            .width(220.dp)
-                            .padding(vertical = 6.dp),
-                    ) {
-                        options.forEachIndexed { index, label ->
-                            val selected = index == selectedIndex
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (selected) MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-                                        else Color.Transparent,
-                                    )
-                                    .clickable {
-                                        Haptics.tick(view)
-                                        expanded = false
-                                        onPick(index)
-                                    }
-                                    .padding(horizontal = 18.dp, vertical = 13.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 15.sp,
-                                    color = if (selected) MiuixTheme.colorScheme.primary
-                                    else MiuixTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                if (selected) {
-                                    Icon(
-                                        imageVector = MiuixIcons.Basic.Check,
-                                        contentDescription = null,
-                                        tint = MiuixTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            }
-                        }
+        Text(
+            text = title,
+            fontSize = 16.sp,
+            color = MiuixTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Box {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable {
+                        Haptics.click(view)
+                        expanded = !expanded
                     }
+                    .padding(start = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = value,
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onBackgroundVariant,
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector = MiuixIcons.Basic.ArrowUpDown,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onBackgroundVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            MiuixDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                options.forEachIndexed { index, label ->
+                    val selected = index == selectedIndex
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = label,
+                                fontSize = 15.sp,
+                                color = if (selected) MiuixTheme.colorScheme.primary
+                                else MiuixTheme.colorScheme.onSurface,
+                            )
+                        },
+                        trailingIcon = {
+                            if (selected) {
+                                Icon(
+                                    imageVector = MiuixIcons.Basic.Check,
+                                    contentDescription = null,
+                                    tint = MiuixTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        },
+                        onClick = {
+                            Haptics.tick(view)
+                            expanded = false
+                            onPick(index)
+                        },
+                    )
                 }
             }
         }

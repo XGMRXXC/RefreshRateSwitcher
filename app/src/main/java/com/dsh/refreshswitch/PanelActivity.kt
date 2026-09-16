@@ -67,10 +67,7 @@ class PanelActivity : ComponentActivity() {
                             SwitchService.openApp(ctx)
                             dismissing = true
                         },
-                        onOpenSystemSettings = {
-                            OverlayPanel.openSystemSettings(ctx)
-                            dismissing = true
-                        },
+                        
                     )
                     UiStyle.M3E -> M3ePanelContent(
                         st = st,
@@ -79,10 +76,7 @@ class PanelActivity : ComponentActivity() {
                             SwitchService.openApp(ctx)
                             dismissing = true
                         },
-                        onOpenSystemSettings = {
-                            OverlayPanel.openSystemSettings(ctx)
-                            dismissing = true
-                        },
+                        
                     )
                 }
             }

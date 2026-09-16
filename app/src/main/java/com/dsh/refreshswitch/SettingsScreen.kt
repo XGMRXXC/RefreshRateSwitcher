@@ -86,17 +86,6 @@ fun SettingsScreen(st: AppState) {
                 }
             }
         }
-        SmallTitle("")
-        Card(cornerRadius = t.cardRadius) {
-            Text(
-                text = "MIUIX：HyperOS 组件与配色；M3E：Material 3 Expressive（Material You 动态取色）。" +
-                    "底栏「标准」为贴底导航栏，「悬浮底栏」为浮在内容之上的胶囊，横竖屏均生效。",
-                fontSize = 11.5.sp,
-                color = MiuixTheme.colorScheme.onBackgroundVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            )
-        }
-
         // ---------------- 通知 ----------------
         SmallTitle("通知")
         Card(cornerRadius = t.cardRadius) {
@@ -110,6 +99,17 @@ fun SettingsScreen(st: AppState) {
                 },
                 title = "常驻通知",
                 summary = "在通知栏显示当前刷新率与快捷挡位按钮",
+            )
+            SuperSwitch(
+                checked = st.toastEnabled,
+                onCheckedChange = { on ->
+                    Haptics.click(view)
+                    SwitchService.setToastEnabled(ctx, on)
+                    if (on) toast(ctx, "Toast 提示已开启")
+                    asyncRefresh()
+                },
+                title = "Toast 提示",
+                summary = if (st.toastEnabled) "显示全部操作提示" else "已关闭，所有 toast 都不再弹出",
             )
             BasicComponent(
                 title = "守护状态",
@@ -194,7 +194,7 @@ fun SettingsScreen(st: AppState) {
         // ---------------- 关于 ----------------
         SmallTitle("关于")
         Card(cornerRadius = t.cardRadius) {
-            BasicComponent(title = "版本", summary = "3.3")
+            BasicComponent(title = "版本", summary = "4.0.1")
             BasicComponent(
                 title = "root",
                 summary = when {
