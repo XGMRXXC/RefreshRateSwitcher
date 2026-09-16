@@ -3,11 +3,13 @@
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 读取已安装应用列表与图标（自动化页面需要） -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+ />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -39,15 +41,6 @@
             android:exported="true"
             android:label="@string/app_name" />
 
-        <!-- 悬浮窗不可用时的降级面板（对话框样式，不跳转主页面） -->
-        <activity
-            android:name=".PanelActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:taskAffinity="com.dsh.refreshswitch.panel"
-            android:launchMode="singleInstance"
-            android:theme="@style/PanelDialog" />
 
         <!-- 无界面跳板：供外部看门狗静默拉起服务 -->
         <activity
@@ -85,4 +78,11 @@
             </intent-filter>
         </receiver>
     </application>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 </manifest>
