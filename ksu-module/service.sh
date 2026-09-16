@@ -46,6 +46,18 @@ log "已请求启动常驻服务"
 
 # ---- 看门狗：每 60 秒检查一次，掉线则静默拉起 ----
 log "看门狗启动"
+(
+while true; do
+  sleep 60
+  if ! pidof "$PKG" >/dev/null 2>&1; then
+    log "检测到服务掉线，静默拉起"
+    am start -n "$PKG/.TrampolineActivity" >/dev/null 2>&1
+  fi
+done
+) &
+
+# ---- 看门狗：每 60 秒检查一次，掉线则静默拉起 ----
+log "看门狗启动"
 while true; do
   sleep 60
   if ! pidof "$PKG" >/dev/null 2>&1; then
