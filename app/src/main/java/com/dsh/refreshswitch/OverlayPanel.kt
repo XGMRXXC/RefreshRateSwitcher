@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
@@ -73,6 +75,41 @@ object OverlayPanel {
                 setViewTreeViewModelStoreOwner(o)
                 setViewTreeSavedStateRegistryOwner(o)
                 setContent {
+                    // 长按拖动 + 位置记忆（竖屏/横屏分开记忆，两种 UI 共用同一份）
+                    val dragView = androidx.compose.ui.platform.LocalView.current
+                    val landscape = ctx.resources.configuration.orientation ==
+                        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    val density = androidx.compose.ui.platform.LocalDensity.current
+                    val dragOffsetState = androidx.compose.runtime.remember {
+                        val p = SwitchService.getPanelOffsetPx(ctx, landscape)
+                        androidx.compose.runtime.mutableStateOf(
+                            androidx.compose.ui.unit.IntOffset(p[0], p[1]),
+                        )
+                    }
+                    androidx.compose.foundation.layout.Box(
+                        androidx.compose.ui.Modifier
+                            .offset { dragOffsetState.value }
+                            .pointerInput(Unit) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        // 进入可拖动状态：震动反馈
+                                        Haptics.click(dragView)
+                                    },
+                                    onDrag = { _, delta ->
+                                        dragOffsetState.value = androidx.compose.ui.unit.IntOffset(
+                                            dragOffsetState.value.x + delta.x.toInt(),
+                                            dragOffsetState.value.y + delta.y.toInt(),
+                                        )
+                                    },
+                                    onDragEnd = {
+                                        SwitchService.setPanelOffsetPx(ctx, landscape, dragOffsetState.value.x, dragOffsetState.value.y)
+                                    },
+                                    onDragCancel = {
+                                        SwitchService.setPanelOffsetPx(ctx, landscape, dragOffsetState.value.x, dragOffsetState.value.y)
+                                    },
+                                )
+                            },
+                    ) {
                     when (UiStyle.of(SwitchService.getUiStyle(ctx))) {
                         UiStyle.MIUIX -> AppTheme {
                             PanelRoot(
@@ -80,6 +117,10 @@ object OverlayPanel {
                                 onOpenApp = {
                                     SwitchService.openApp(ctx)
                                     hide()
+                                },
+                                onResetPosition = {
+                                    dragOffsetState.value = androidx.compose.ui.unit.IntOffset.Zero
+                                    SwitchService.setPanelOffsetPx(ctx, landscape, 0, 0)
                                 },
                             )
                         }
@@ -90,8 +131,13 @@ object OverlayPanel {
                                     SwitchService.openApp(ctx)
                                     hide()
                                 },
+                                onResetPosition = {
+                                    dragOffsetState.value = androidx.compose.ui.unit.IntOffset.Zero
+                                    SwitchService.setPanelOffsetPx(ctx, landscape, 0, 0)
+                                },
                             )
                         }
+                    }
                     }
                 }
             }
@@ -177,7 +223,7 @@ object OverlayPanel {
 }
 
 @androidx.compose.runtime.Composable
-private fun PanelRoot(onClose: () -> Unit, onOpenApp: () -> Unit) {
+private fun PanelRoot(onClose: () -> Unit, onOpenApp: () -> Unit, onResetPosition: () -> Unit = {}) {
     val ctx = LocalContext.current
     val st = remember { AppState(ctx) }
     val density = LocalDensity.current
@@ -206,6 +252,7 @@ private fun PanelRoot(onClose: () -> Unit, onOpenApp: () -> Unit) {
                     .width(cardWidth)
                     .pointerInput(Unit) { detectTapGestures { /* 吞掉卡片内的空白点击 */ } },
                 onOpenApp = onOpenApp,
+                        onResetPosition = onResetPosition,
             )
         }
     }
