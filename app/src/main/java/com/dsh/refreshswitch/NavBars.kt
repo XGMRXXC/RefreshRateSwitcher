@@ -129,10 +129,7 @@ private fun MiuixNavPill(
     }
 }
 
-/**
- * MIUIX 单选行：右侧 ⌃⌄，点击用 Compose 自带的 DropdownMenu 弹出，
- * 菜单锚定在行**最右侧**（从右边展开）。
- */
+/** MIUIX 单选行：直接用 MIUIX 原生 SuperDropdown（行 + ⌃⌄ + 原生 popup）。 */
 @Composable
 fun MiuixPickerRow(
     title: String,
@@ -141,78 +138,13 @@ fun MiuixPickerRow(
     selectedIndex: Int,
     onPick: (Int) -> Unit,
 ) {
-    val view = LocalView.current
-    var expanded by remember { mutableStateOf(false) }
-
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            fontSize = 16.sp,
-            color = MiuixTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        Box {
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable {
-                        Haptics.click(view)
-                        expanded = !expanded
-                    }
-                    .padding(start = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = value,
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onBackgroundVariant,
-                )
-                Spacer(Modifier.width(4.dp))
-                Icon(
-                    imageVector = MiuixIcons.Basic.ArrowUpDown,
-                    contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onBackgroundVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            MiuixDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                options.forEachIndexed { index, label ->
-                    val selected = index == selectedIndex
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = label,
-                                fontSize = 15.sp,
-                                color = if (selected) MiuixTheme.colorScheme.primary
-                                else MiuixTheme.colorScheme.onSurface,
-                            )
-                        },
-                        trailingIcon = {
-                            if (selected) {
-                                Icon(
-                                    imageVector = MiuixIcons.Basic.Check,
-                                    contentDescription = null,
-                                    tint = MiuixTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
-                        },
-                        onClick = {
-                            Haptics.tick(view)
-                            expanded = false
-                            onPick(index)
-                        },
-                    )
-                }
-            }
-        }
-    }
+    top.yukonga.miuix.kmp.extra.SuperDropdown(
+        items = options,
+        selectedIndex = selectedIndex,
+        title = title,
+        summary = null,
+        showValue = true,
+        renderInRootScaffold = true,
+        onSelectedIndexChange = { onPick(it) },
+    )
 }
