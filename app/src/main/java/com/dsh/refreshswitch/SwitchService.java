@@ -546,27 +546,7 @@ public class SwitchService extends Service {
 
         if (Build.VERSION.SDK_INT >= 21) b.setVisibility(Notification.VISIBILITY_PUBLIC);
 
-        List<ModeUtil.Mode> modes = ModeUtil.listModes(this);
-        int req = 100;
-        for (int id : pickQuick(modes)) {
-            ModeUtil.Mode m = ModeUtil.findById(modes, id);
-            if (m == null) continue;
-            b.addAction(new Notification.Action.Builder(
-                    R.drawable.ic_stat, m.shortLabel(), svcIntent(ACTION_QUICK, id, req++)).build());
-        }
-        b.addAction(new Notification.Action.Builder(
-                R.drawable.ic_stat, lock ? "解除锁定" : "锁定",
-                svcIntent(ACTION_TOGGLE_LOCK, -1, 200)).build());
+        // 通知不再提供长按选项（快捷挡位 / 锁定），仅保留点击弹出面板
         return b.build();
-    }
-
-    /** 快捷按钮取最高的三档。 */
-    static int[] pickQuick(List<ModeUtil.Mode> modes) {
-        List<ModeUtil.Mode> sorted = new ArrayList<>(modes);
-        Collections.sort(sorted, (a, b) -> Float.compare(b.fps, a.fps));
-        int n = Math.min(3, sorted.size());
-        int[] out = new int[n];
-        for (int i = 0; i < n; i++) out[i] = sorted.get(i).id;
-        return out;
     }
 }
