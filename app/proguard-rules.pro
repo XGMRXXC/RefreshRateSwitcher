@@ -13,3 +13,4 @@
 -keep class com.dsh.refreshswitch.TrampolineActivity { *; }
 -keep class com.dsh.refreshswitch.MainActivity { *; }
 -keep class com.dsh.refreshswitch.PanelActivity { *; }
+
