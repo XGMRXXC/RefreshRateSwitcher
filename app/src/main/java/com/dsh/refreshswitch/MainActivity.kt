@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -31,10 +33,24 @@ import androidx.compose.material3.NavigationRail as M3NavigationRail
 import androidx.compose.material3.NavigationRailItem as M3NavigationRailItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
@@ -89,8 +105,13 @@ fun AppRoot() {
     val st = remember { AppState(ctx) }
     val style = UiStyle.of(SwitchService.getUiStyle(ctx))
 
-    // 每秒在 IO 线程刷新（读 sysfs 需 su，不能放主线程）
+    // 打开应用先立刻适配一次（重新枚举主屏 display 0 的挡位、重新检测 root），
+    // 之后每秒在 IO 线程刷新（读 sysfs / 调用 su 不能放主线程）
     LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            st.refreshModes()
+            st.refresh()
+        }
         while (true) {
             withContext(Dispatchers.IO) { st.refresh() }
             delay(1000)
@@ -100,7 +121,8 @@ fun AppRoot() {
     when (style) {
         UiStyle.MIUIX -> AppTheme {
             ApplySystemBarAppearance()
-            MiuixShell(st)
+            // MIUIX 原生下拉弹层需要 NavigationEventDispatcherOwner
+            MiuixPopupHost { MiuixShell(st) }
         }
         UiStyle.M3E -> M3eTheme {
             ApplySystemBarAppearance()
@@ -135,36 +157,46 @@ private fun TabPager(
 private fun MiuixShell(st: AppState) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pager = rememberTabPager(3)
-    val tab = pager.currentPage
+    val auto = st.autoEnabled
+    var autoQuery by remember { mutableStateOf("") }
+    var autoSearching by remember { mutableStateOf(false) }
+    val pageCount = if (auto) 3 else 2
+    val pager = rememberPagerState(pageCount = { pageCount })
+    val tab = pager.currentPage.coerceAtMost(pageCount - 1)
     val wide = isWideScreen()
+    // 关掉自动化后当前页可能越界，回到最后一页
+    LaunchedEffect(pageCount) { if (pager.currentPage > pageCount - 1) pager.scrollToPage(pageCount - 1) }
     val title = when (tab) {
         0 -> "刷新率"
-        1 -> "自动化"
+        1 -> if (auto) "自动化" else "设置"
         else -> "设置"
     }
     val openOverlay: () -> Unit = {
-        if (!OverlayPanel.show(ctx)) toast(ctx, "请先授予悬浮窗权限")
+        if (!OverlayPanel.show(ctx)) toast(ctx, "需要悬浮窗权限")
     }
     val page: @Composable (Int) -> Unit = { t ->
         when (t) {
             0 -> HomeScreen(st, openOverlay)
-            1 -> MiuixAutomationScreen(st)
+            1 -> if (auto) MiuixAutomationScreen(st, autoQuery) else SettingsScreen(st)
             else -> SettingsScreen(st)
         }
     }
-    val navItems = listOf(
-        HomeIcon to "主页",
-        MiuixIcons.Tune to "自动化",
-        MiuixIcons.Settings to "设置",
-    )
+    val navItems = if (auto) {
+        listOf(HomeIcon to "主页", MiuixIcons.Tune to "自动化", MiuixIcons.Settings to "设置")
+    } else {
+        listOf(HomeIcon to "主页", MiuixIcons.Settings to "设置")
+    }
     val go: (Int) -> Unit = { i -> scope.launch { pager.animateScrollToPage(i) } }
 
     // 横屏：侧栏独立占满整列（不被顶栏截断）；竖屏用 Scaffold
     if (wide) {
+        // 横屏也用 MiuixScaffold 包一层：SuperDropdown 的原生弹层需要 Scaffold 作为宿主，
+        // 否则横屏下 ⌃⌄ 弹不出来
+        MiuixScaffold { scaffoldPadding ->
         Row(
             Modifier
                 .fillMaxSize()
+                .padding(scaffoldPadding)
                 .background(MiuixTheme.colorScheme.surface),
         ) {
             if (st.bottomBarStyle == BarStyle.FLOATING) {
@@ -194,13 +226,94 @@ private fun MiuixShell(st: AppState) {
                     .fillMaxHeight()
                     .background(MiuixTheme.colorScheme.surface),
             ) {
-                MiuixSmallTopAppBar(title = title)
-                TabPager(pager, Modifier.fillMaxSize()) { page(it) }
+                Box {
+                Box {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)          // 固定高度：三个页面顶栏高度一致
+                        .padding(start = 16.dp, end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (autoSearching && tab == 1) "" else title,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (autoSearching && tab == 1) {
+                        MiuixAutoSearchField(
+                            query = autoQuery,
+                            onQueryChange = { autoQuery = it },
+                            onClose = { autoQuery = ""; autoSearching = false },
+                        )
+                    } else if (auto && tab == 1) {
+                        MiuixAutoTopActions(
+                            showSystem = st.autoShowSystem,
+                            onSearch = { autoSearching = true },
+                            onToggleSystem = {
+                                AutoRules.setShowSystem(ctx, !st.autoShowSystem)
+                                st.refresh()
+                            },
+                        )
+                    } else if (false) {
+                        MiuixAutoTopActions(
+                            showSystem = st.autoShowSystem,
+                            onSearch = { autoSearching = true },
+                            onToggleSystem = {
+                                AutoRules.setShowSystem(ctx, !st.autoShowSystem)
+                                st.refresh()
+                            },
+                        )
+                    }
+                }
+                }
+                }
+                Box {
+                Box {
+                    TabPager(pager, Modifier.fillMaxSize()) { page(it) }
+                }
+                }
             }
+        }
         }
     } else {
         MiuixScaffold(
-            topBar = { MiuixSmallTopAppBar(title = title) },
+            topBar = { MiuixSmallTopAppBar(
+                    title = if (autoSearching && tab == 1) "" else title,
+                    actions = {
+                        if (auto && tab == 1) {
+                            AnimatedVisibility(
+                                visible = autoSearching,
+                                enter = fadeIn(animationSpec = tween(140)) +
+                                    slideInHorizontally(animationSpec = tween(220), initialOffsetX = { it / 3 }),
+                                exit = fadeOut(animationSpec = tween(90)),
+                            ) {
+                                MiuixAutoSearchField(
+                                    query = autoQuery,
+                                    onQueryChange = { autoQuery = it },
+                                        onClose = { autoQuery = ""; autoSearching = false },
+                                    )
+                                }
+                                AnimatedVisibility(
+                                    visible = !autoSearching,
+                                    enter = fadeIn(animationSpec = tween(150)),
+                                    exit = fadeOut(animationSpec = tween(100)),
+                                ) {
+                                    MiuixAutoTopActions(
+                                        showSystem = st.autoShowSystem,
+                                        onSearch = { autoSearching = true },
+                                        onToggleSystem = {
+                                            AutoRules.setShowSystem(ctx, !st.autoShowSystem)
+                                            st.refresh()
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                    )
+                },
             bottomBar = {
                 if (st.bottomBarStyle != BarStyle.FLOATING) {
                     MiuixNavigationBar {
@@ -241,30 +354,39 @@ private fun MiuixShell(st: AppState) {
 private fun M3eShell(st: AppState) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pager = rememberTabPager(3)
-    val tab = pager.currentPage
+    val auto = st.autoEnabled
+    var autoQuery by remember { mutableStateOf("") }
+    var autoSearching by remember { mutableStateOf(false) }
+    val pageCount = if (auto) 3 else 2
+    val pager = rememberPagerState(pageCount = { pageCount })
+    val tab = pager.currentPage.coerceAtMost(pageCount - 1)
     val wide = isWideScreen()
+    LaunchedEffect(pageCount) { if (pager.currentPage > pageCount - 1) pager.scrollToPage(pageCount - 1) }
     val title = when (tab) {
         0 -> "刷新率"
-        1 -> "自动化"
+        1 -> if (auto) "自动化" else "设置"
         else -> "设置"
     }
     val pageIcon = when (tab) {
         0 -> HomeIcon
-        1 -> MiuixIcons.Tune
+        1 -> if (auto) MiuixIcons.Tune else MiuixIcons.Settings
         else -> MiuixIcons.Settings
     }
     val openOverlay: () -> Unit = {
-        if (!OverlayPanel.show(ctx)) toast(ctx, "请先授予悬浮窗权限")
+        if (!OverlayPanel.show(ctx)) toast(ctx, "需要悬浮窗权限")
     }
     val page: @Composable (Int) -> Unit = { t ->
         when (t) {
             0 -> M3eHomeScreen(st, openOverlay)
-            1 -> M3eAutomationScreen(st)
+            1 -> if (auto) M3eAutomationScreen(st, autoQuery) else M3eSettingsScreen(st)
             else -> M3eSettingsScreen(st)
         }
     }
-    val navItems = listOf(HomeIcon to "主页", MiuixIcons.Tune to "自动化", MiuixIcons.Settings to "设置")
+    val navItems = if (auto) {
+        listOf(HomeIcon to "主页", MiuixIcons.Tune to "自动化", MiuixIcons.Settings to "设置")
+    } else {
+        listOf(HomeIcon to "主页", MiuixIcons.Settings to "设置")
+    }
     val go: (Int) -> Unit = { i -> scope.launch { pager.animateScrollToPage(i) } }
 
     val floating = st.bottomBarStyle == BarStyle.FLOATING
@@ -310,8 +432,31 @@ private fun M3eShell(st: AppState) {
                         ),
                     ),
             ) {
-                M3eTopBar(title, pageIcon)
-                TabPager(pager, Modifier.fillMaxSize()) { page(it) }
+                M3eTopBar(
+                title = if (autoSearching && tab == 1) "" else title,
+                icon = pageIcon,
+                actions = {
+                    if (autoSearching && tab == 1) {
+                        M3eAutoSearchField(
+                            query = autoQuery,
+                            onQueryChange = { autoQuery = it },
+                            onClose = { autoQuery = ""; autoSearching = false },
+                        )
+                    } else if (auto && tab == 1) {
+                        M3eAutoTopActions(
+                            showSystem = st.autoShowSystem,
+                            onSearch = { autoSearching = true },
+                            onToggleSystem = {
+                                AutoRules.setShowSystem(ctx, !st.autoShowSystem)
+                                st.refresh()
+                            },
+                        )
+                    }
+                },
+            )
+                Box {
+                    TabPager(pager, Modifier.fillMaxSize()) { page(it) }
+                }
             }
         }
     } else {
@@ -325,8 +470,31 @@ private fun M3eShell(st: AppState) {
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing),
             ) {
-                M3eTopBar(title, pageIcon)
-                TabPager(pager, Modifier.fillMaxSize()) { page(it) }
+                M3eTopBar(
+                title = if (autoSearching && tab == 1) "" else title,
+                icon = pageIcon,
+                actions = {
+                    if (autoSearching && tab == 1) {
+                        M3eAutoSearchField(
+                            query = autoQuery,
+                            onQueryChange = { autoQuery = it },
+                            onClose = { autoQuery = ""; autoSearching = false },
+                        )
+                    } else if (auto && tab == 1) {
+                        M3eAutoTopActions(
+                            showSystem = st.autoShowSystem,
+                            onSearch = { autoSearching = true },
+                            onToggleSystem = {
+                                AutoRules.setShowSystem(ctx, !st.autoShowSystem)
+                                st.refresh()
+                            },
+                        )
+                    }
+                },
+            )
+                Box {
+                    TabPager(pager, Modifier.fillMaxSize()) { page(it) }
+                }
             }
             if (floating) {
                 Box(
@@ -361,3 +529,4 @@ private fun M3eShell(st: AppState) {
         }
     }
 }
+
