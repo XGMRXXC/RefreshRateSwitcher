@@ -265,6 +265,10 @@ public class SwitchService extends Service {
             return;
         }
 
+        // 有 root 时清理老版本可能遗留的 1x1 透明悬浮窗（它会触发系统的「上层显示」提示）
+        if (ModeUtil.hasRoot()) {
+            OverlayModeSwitch.release();
+        }
         createChannel();
         startForeground(NOTIF_ID, buildNotification());
         registerDisplayListener();
