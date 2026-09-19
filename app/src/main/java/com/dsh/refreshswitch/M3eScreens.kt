@@ -801,7 +801,7 @@ fun M3eSettingsScreen(st: AppState) {
         }
 
         M3eCard {
-            M3eRow(MiuixIcons.Info, "版本", "4.2.1.5")
+            M3eRow(MiuixIcons.Info, "版本", "4.2.1.6")
             M3eRow(
                 if (st.root) MiuixIcons.Lock else MiuixIcons.Unlock,
                 "root",
