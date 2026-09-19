@@ -64,6 +64,10 @@ object OverlayPanel {
 
     @JvmStatic
     fun show(ctx: Context): Boolean {
+        // 面板显示期间才需要悬浮窗权限：没有就临时用 root 开一下
+        if (!canShow(ctx) && ModeUtil.hasRoot()) {
+            ModeUtil.grantOverlay()
+        }
         if (hostView != null) return true
         if (!canShow(ctx)) return false
         dismissingState.value = false
