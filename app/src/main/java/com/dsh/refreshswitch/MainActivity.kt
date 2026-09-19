@@ -107,6 +107,14 @@ fun AppRoot() {
 
     // 打开应用先立刻适配一次（重新枚举主屏 display 0 的挡位、重新检测 root），
     // 之后每秒在 IO 线程刷新（读 sysfs / 调用 su 不能放主线程）
+    // 首次进入若未授予悬浮窗权限，直接带用户去系统设置授权（不再使用 root 授权）
+    LaunchedEffect(Unit) {
+        if (!com.dsh.refreshswitch.OverlayPanel.canShow(ctx)) {
+            kotlinx.coroutines.delay(600)
+            toast(ctx, "请授予「显示在其他应用上层」权限")
+            SysActions.openOverlaySettings(ctx)
+        }
+    }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             st.refreshModes()
