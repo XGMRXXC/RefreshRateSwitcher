@@ -177,11 +177,7 @@ fun SettingsScreen(st: AppState) {
                 summary = if (st.overlayGranted) "已开启，通知点击直接弹出悬浮面板" else "未开启，将降级为对话框面板",
                 action = if (st.overlayGranted) "已开启" else "去开启",
             ) {
-                if (ModeUtil.hasRoot() && ModeUtil.grantOverlay()) {
-                    toast(ctx, "已授权")
-                } else {
-                    SysActions.openOverlaySettings(ctx)
-                }
+                SysActions.openOverlaySettings(ctx)
                 asyncRefresh()
             }
             ActionRow(
@@ -213,7 +209,7 @@ fun SettingsScreen(st: AppState) {
         // ---------------- 关于 ----------------
         SmallTitle("关于")
         Card(cornerRadius = t.cardRadius) {
-            BasicComponent(title = "版本", summary = "4.2.1.4")
+            BasicComponent(title = "版本", summary = "4.2.1.5")
             BasicComponent(
                 title = "root",
                 summary = when {
