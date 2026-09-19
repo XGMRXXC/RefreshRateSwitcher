@@ -139,6 +139,10 @@ public final class ModeUtil {
         }
 
         // 1) 有 root：再叠加 cmd display（全局生效、按 framework modeId）
+        // 有 root 时释放「无 root 兜底」用的 1x1 透明悬浮窗（否则系统常驻提示「上层显示内容」）
+         if (hasRoot()) {
+             OverlayModeSwitch.release();
+         }
         if (!hasRoot()) {
             return wantFps > 0 && OverlayModeSwitch.supported(ctx);
         }
