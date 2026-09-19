@@ -59,7 +59,6 @@ class AppState(private val ctx: Context) {
             rootChecked = true
         }
         if (r) {
-            if (!OverlayPanel.canShow(ctx)) ModeUtil.grantOverlay()
             ModeUtil.whitelistBattery()
         }
     }
