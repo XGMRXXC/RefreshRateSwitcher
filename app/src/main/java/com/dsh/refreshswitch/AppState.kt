@@ -59,10 +59,7 @@ class AppState(private val ctx: Context) {
             rootChecked = true
         }
         if (r) {
-            // 面板没在显示就不要保留悬浮窗权限，否则系统会一直提示「正在其他应用的上层显示内容」
-            if (OverlayPanel.canShow(ctx) && !OverlayPanel.isShowing()) {
-                ModeUtil.revokeOverlay()
-            }
+
             ModeUtil.whitelistBattery()
         }
     }
