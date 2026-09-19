@@ -758,8 +758,7 @@ fun M3eSettingsScreen(st: AppState) {
                 subtitle = if (st.overlayGranted) "已开启，通知点击直接弹出悬浮面板" else "未开启，将降级为对话框面板",
                 trailing = {
                     TextButton(onClick = {
-                        if (ModeUtil.hasRoot() && ModeUtil.grantOverlay()) toast(ctx, "已授权")
-                        else SysActions.openOverlaySettings(ctx)
+                        SysActions.openOverlaySettings(ctx)
                         refresh()
                     }) { Text(if (st.overlayGranted) "已开启" else "去开启") }
                 },
@@ -802,7 +801,7 @@ fun M3eSettingsScreen(st: AppState) {
         }
 
         M3eCard {
-            M3eRow(MiuixIcons.Info, "版本", "4.2.1.4")
+            M3eRow(MiuixIcons.Info, "版本", "4.2.1.5")
             M3eRow(
                 if (st.root) MiuixIcons.Lock else MiuixIcons.Unlock,
                 "root",
