@@ -257,6 +257,10 @@ public final class ModeUtil {
     public static boolean grantOverlay() {
         return exec("appops set " + "com.dsh.refreshswitch" + " SYSTEM_ALERT_WINDOW allow");
     }
+    /** 收回悬浮窗权限（appops ignore）：避免系统常驻提示「正在其他应用的上层显示内容」。 */
+    public static boolean revokeOverlay() {
+        return exec("appops set " + "com.dsh.refreshswitch" + " SYSTEM_ALERT_WINDOW ignore");
+    }
 
     /** 加入电池优化白名单，降低被系统杀掉的概率（需 root）。 */
     public static boolean whitelistBattery() {
