@@ -1,6 +1,6 @@
 id=refresh_switch
 name=XiaomiPadFreshRateSwitcher (刷新率切换)
-version=4.2.1.5
-versionCode=4215
+version=4.2.1.6
+versionCode=4216
 author=XGMRXXC
 description=常驻通知快速切换/锁定屏幕刷新率。随模块附带 RefreshSwitch.apk，开机自动安装。
