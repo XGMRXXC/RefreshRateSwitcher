@@ -2,22 +2,21 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.compose")
 }
 
 android {
     namespace = "com.dsh.refreshswitch"
-    compileSdk = 36
-    buildToolsVersion = "36.0.0"
+    compileSdk = 37
+
 
     defaultConfig {
         applicationId = "com.dsh.refreshswitch"
-        minSdk = 29
+        minSdk = 33
         targetSdk = 36
-        versionCode = 4216
-        versionName = "4.2.1.6"
+        versionCode = 4220
+        versionName = "4.2.2"
     }
 
     signingConfigs {
@@ -85,8 +84,10 @@ tasks.withType<JavaCompile>().configureEach {
 dependencies {
     // 现代 API（libXposed 102）：编译期依赖，运行时由 LSPosed 提供
 
-    implementation("top.yukonga.miuix.kmp:miuix-android:0.8.8")
-    implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.8.8")
+    implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-core-android:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4")
     // MIUIX 的 SuperDropdown / 原生 popup 需要它（miuix 未做 api 传递）
     implementation("org.jetbrains.androidx.navigationevent:navigationevent-compose:1.0.1")
 
