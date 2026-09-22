@@ -218,7 +218,7 @@ fun MiuixAutoTopActions(showSystem: Boolean, onSearch: () -> Unit, onToggleSyste
         }
         // MIUIX 原生弹层：WindowListPopup 在独立窗口里渲染，
         // 不会被顶栏父布局约束成非法尺寸（SuperListPopup 会崩的原因）
-        top.yukonga.miuix.kmp.extra.WindowListPopup(
+        top.yukonga.miuix.kmp.window.WindowListPopup(
             show = menu,
             onDismissRequest = { menu = false },
             enableWindowDim = true,
