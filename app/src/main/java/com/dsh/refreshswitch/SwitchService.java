@@ -265,6 +265,10 @@ public class SwitchService extends Service {
             return;
         }
 
+        // 有 root 时：直接把悬浮窗权限授好（重装/崩溃后免手动授权）
+        if (!OverlayPanel.canShow(this) && ModeUtil.hasRoot()) {
+            ModeUtil.grantOverlay();
+        }
         // 有 root 时清理老版本可能遗留的 1x1 透明悬浮窗（它会触发系统的「上层显示」提示）
         if (ModeUtil.hasRoot()) {
             OverlayModeSwitch.release();
@@ -277,6 +281,7 @@ public class SwitchService extends Service {
 
         // 尝试用 root 自我授予悬浮窗权限，让通知点击可直接弹悬浮窗
         if (!OverlayPanel.canShow(this) && ModeUtil.hasRoot()) {
+            // 悬浮窗权限改为用户在系统设置中手动授予
         }
         // 首次运行：把当前刷新率作为锁定目标，实现"一直设定"
         if (isLockEnabled(this) && lockedFps(this) <= 0) {
@@ -350,6 +355,7 @@ public class SwitchService extends Service {
         if (ModeUtil.hasRoot()) ModeUtil.suOut("cmd statusbar collapse");
         if (OverlayPanel.show(this)) return;
         if (ModeUtil.hasRoot()) {
+            // 悬浮窗权限改为用户在系统设置中手动授予
             if (OverlayPanel.show(this)) return;
         }
         // 悬浮窗不可用（未授权）时只提示；不再回退到独立 Activity 面板，避免出现第二套面板

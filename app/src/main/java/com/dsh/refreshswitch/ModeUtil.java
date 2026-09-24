@@ -258,6 +258,10 @@ public final class ModeUtil {
     public static void resetRootCache() { suOk = null; }
 
     /** 加入电池优化白名单，降低被系统杀掉的概率（需 root）。 */
+    /** 用 root 直接授予悬浮窗权限（appops allow）：重装/崩溃后免去手动去系统设置授权。 */
+    public static boolean grantOverlay() {
+        return exec("appops set " + "com.dsh.refreshswitch" + " SYSTEM_ALERT_WINDOW allow");
+    }
     public static boolean whitelistBattery() {
         return exec("dumpsys deviceidle whitelist +com.dsh.refreshswitch");
     }

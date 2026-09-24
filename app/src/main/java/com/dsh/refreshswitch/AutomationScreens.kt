@@ -38,6 +38,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.menu.WindowIconDropdownMenu
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -190,7 +194,6 @@ private fun AppIconMiuix(icon: ImageBitmap?, alpha: Float) {
 @Composable
 fun MiuixAutoTopActions(showSystem: Boolean, onSearch: () -> Unit, onToggleSystem: () -> Unit) {
     val view = LocalView.current
-    var menu by remember { mutableStateOf(false) }
     // 必须自己成行：AnimatedVisibility 的内容不是 RowScope，否则两个图标会叠在一起
     Row(verticalAlignment = Alignment.CenterVertically) {
     Box(
@@ -204,10 +207,20 @@ fun MiuixAutoTopActions(showSystem: Boolean, onSearch: () -> Unit, onToggleSyste
             modifier = Modifier.size(22.dp),
         )
     }
-    Box {
-        Box(
-            Modifier.size(44.dp).clickable { Haptics.click(view); menu = true },
-            contentAlignment = Alignment.Center,
+        WindowIconDropdownMenu(
+            entry = DropdownEntry(
+                listOf(
+                    DropdownItem(
+                        text = "显示系统应用",
+                        selected = showSystem,
+                        onClick = {
+                            Haptics.click(view)
+                            onToggleSystem()
+                        },
+                    ),
+                ),
+            ),
+            maxHeight = 320.dp,
         ) {
             Icon(
                 imageVector = MiuixIcons.More,
@@ -216,34 +229,6 @@ fun MiuixAutoTopActions(showSystem: Boolean, onSearch: () -> Unit, onToggleSyste
                 modifier = Modifier.size(22.dp),
             )
         }
-        // MIUIX 原生弹层：WindowListPopup 在独立窗口里渲染，
-        // 不会被顶栏父布局约束成非法尺寸（SuperListPopup 会崩的原因）
-        top.yukonga.miuix.kmp.window.WindowListPopup(
-            show = menu,
-            onDismissRequest = { menu = false },
-            enableWindowDim = true,
-            maxHeight = 320.dp,
-        ) {
-            // 不用 ListPopupColumn（它的 maxIntrinsicWidth 测量在顶栏约束下会算出非法尺寸），
-            // 用普通 Column 承载 MIUIX 的 BasicComponent，外观仍由 MIUIX 弹层容器决定
-            Column(Modifier.width(200.dp).padding(vertical = 6.dp)) {
-                top.yukonga.miuix.kmp.basic.BasicComponent(
-                    title = "显示系统应用",
-                    onClick = { Haptics.click(view); menu = false; onToggleSystem() },
-                    endActions = {
-                        if (showSystem) {
-                            Icon(
-                                imageVector = MiuixIcons.Basic.Check,
-                                contentDescription = null,
-                                tint = MiuixTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    },
-                )
-            }
-        }
-    }
     }
 }
 
@@ -422,7 +407,15 @@ fun M3eAutoSearchField(query: String, onQueryChange: (String) -> Unit, onClose: 
 // =====================================================================
 
 @Composable
-fun MiuixAutomationScreen(st: AppState, query: String) {
+fun MiuixAutomationScreen(
+    st: AppState,
+    query: String,
+    searching: Boolean = false,
+    onSearchingChange: (Boolean) -> Unit = {},
+    onQueryChange: (String) -> Unit = {},
+    inset: PaddingValues = PaddingValues(0.dp),
+    scrollMod: Modifier = Modifier,
+) {
     val ctx = LocalContext.current
     val t = LocalStyleTokens.current
     var reload by remember { mutableIntStateOf(0) }
@@ -447,7 +440,33 @@ fun MiuixAutomationScreen(st: AppState, query: String) {
             .fillMaxSize()
             .padding(horizontal = 12.dp),
     ) {
-        Spacer(Modifier.height(6.dp))
+        // 顶栏让位：作为内容内边距（随滚动移动）
+        Spacer(Modifier.height(inset.calculateTopPadding() + 6.dp))
+
+        // 官方 SearchBar：仅在搜索态渲染（避免与顶栏搜索图标重复），展开动画由 MIUIX 提供
+        if (searching) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    MiuixAutoSearchBar(
+                        expanded = true,
+                        onExpandedChange = onSearchingChange,
+                        query = query,
+                        onQueryChange = onQueryChange,
+                    )
+                }
+                top.yukonga.miuix.kmp.basic.TextButton(
+                    onClick = {
+                        onQueryChange("")
+                        onSearchingChange(false)
+                    },
+                    text = "取消",
+                )
+            }
+            Spacer(Modifier.height(10.dp))   // 与下方应用列表拉开间距
+        }
 
         Box(
             Modifier
@@ -457,11 +476,16 @@ fun MiuixAutomationScreen(st: AppState, query: String) {
                 .background(MiuixTheme.colorScheme.surfaceContainer),
         ) {
             PullToRefresh(
-                isRefreshing = loading,
+                isRefreshing = loading && allApps.isNotEmpty(),   // 首屏空列表时不要再显示刷新指示器
                 onRefresh = { refreshRequested = true; reload++ },
                 refreshTexts = listOf("下拉刷新", "松开立即刷新", "正在刷新…"),
             ) {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            // 底部进入底栏之下（视口铺满），同时用 contentPadding 让最后一个应用能滚出底栏范围
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 96.dp),
+            ) {
                 items(apps, key = { it[0] }) { app ->
                     val pkg = app[0]
                     val label = app[1]
@@ -564,11 +588,16 @@ fun M3eAutomationScreen(st: AppState, query: String) {
                 .background(MaterialTheme.colorScheme.surfaceContainer),
         ) {
             PullToRefresh(
-                isRefreshing = loading,
+                isRefreshing = loading && allApps.isNotEmpty(),   // 首屏空列表时不要再显示刷新指示器
                 onRefresh = { refreshRequested = true; reload++ },
                 refreshTexts = listOf("下拉刷新", "松开立即刷新", "正在刷新…"),
             ) {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            // 底部进入底栏之下（视口铺满），同时用 contentPadding 让最后一个应用能滚出底栏范围
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 96.dp),
+            ) {
                 items(apps, key = { it[0] }) { app ->
                     val pkg = app[0]
                     val label = app[1]
@@ -709,4 +738,36 @@ private fun M3eAppRuleRow(
             }
         }
     }
+}
+
+// =====================================================================
+// 官方 SearchBar 封装（自带展开/收起动画，替换手搓的 AnimatedVisibility 方案）
+// =====================================================================
+
+/**
+ * MIUIX 官方搜索栏（展开/收起动画由官方组件提供，替换手搓的 AnimatedVisibility）。
+ * 参数名以编译期校验为准：SearchBar(inputField = …) / InputField(query = …, onQueryChange = …)
+ */
+@Composable
+fun MiuixAutoSearchBar(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    query: String,
+    onQueryChange: (String) -> Unit,
+) {
+    top.yukonga.miuix.kmp.basic.SearchBar(
+        // content = 折叠态内容；这里只在搜索态渲染，所以给空（否则展开态会多出一个小搜索图标）
+        content = {},
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+        inputField = {
+            top.yukonga.miuix.kmp.basic.InputField(
+                query = query,
+                onQueryChange = onQueryChange,
+                onSearch = { },
+                expanded = expanded,
+                onExpandedChange = onExpandedChange,
+            )
+        },
+    )
 }

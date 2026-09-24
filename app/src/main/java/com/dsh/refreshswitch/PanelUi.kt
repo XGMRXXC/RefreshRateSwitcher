@@ -29,6 +29,11 @@ import androidx.compose.material3.Icon
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Reset
 import top.yukonga.miuix.kmp.icon.extended.Forward
+import top.yukonga.miuix.kmp.basic.IconButton
+import androidx.compose.foundation.layout.PaddingValues
+import top.yukonga.miuix.kmp.basic.Badge
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -109,27 +114,34 @@ fun PanelContent(
                     color = MiuixTheme.colorScheme.onBackgroundVariant,
                     modifier = Modifier.weight(1f),
                 )
-                Icon(
-                    imageVector = MiuixIcons.Reset,
-                    contentDescription = "恢复默认位置",
-                    tint = MiuixTheme.colorScheme.onBackgroundVariant,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .clickable { Haptics.click(view); onResetPosition() }
-                        .padding(7.dp),
-                )
+                // MIUIX 原生图标按钮（不再自绘圆形点击区）
+                IconButton(
+                    onClick = { Haptics.click(view); onResetPosition() },
+                    cornerRadius = 16.dp,
+                    minWidth = 32.dp,
+                    minHeight = 32.dp,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Reset,
+                        contentDescription = "恢复默认位置",
+                        tint = MiuixTheme.colorScheme.onBackgroundVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
                 Spacer(Modifier.width(4.dp))
-                Icon(
-                    imageVector = MiuixIcons.Forward,
-                    contentDescription = "进入应用",
-                    tint = MiuixTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .clickable { Haptics.click(view); onOpenApp() }
-                        .padding(7.dp),
-                )
+                IconButton(
+                    onClick = { Haptics.click(view); onOpenApp() },
+                    cornerRadius = 16.dp,
+                    minWidth = 32.dp,
+                    minHeight = 32.dp,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Forward,
+                        contentDescription = "进入应用",
+                        tint = MiuixTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
 
             // ---- 当前刷新率（大字）+ 锁定状态 ----
@@ -152,15 +164,10 @@ fun PanelContent(
                     modifier = Modifier.padding(start = 2.dp, bottom = 4.dp),
                 )
                 Spacer(Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .background(
-                            if (locked) MiuixTheme.colorScheme.primaryContainer
-                            else MiuixTheme.colorScheme.surfaceContainerHigh,
-                            RoundedCornerShape(999.dp),
-                        )
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    contentAlignment = Alignment.Center,
+                // MIUIX 原生 Badge（内容走 content 槽）
+                Badge(
+                    containerColor = if (locked) MiuixTheme.colorScheme.primaryContainer
+                    else MiuixTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Text(
                         text = when {
@@ -176,7 +183,7 @@ fun PanelContent(
             }
 
             // ---- 挡位 ----
-            val perRow = 4
+            val perRow = 3
             st.modes.chunked(perRow).forEachIndexed { rowIndex, rowModes ->
                 if (rowIndex > 0) Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -259,25 +266,27 @@ private fun PanelChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val accent = MiuixTheme.colorScheme.primary
-    val bg = if (active) accent else MiuixTheme.colorScheme.surfaceContainerHigh
-    val fg = if (active) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.onSurface
-    Box(
-        modifier = modifier
-            .height(38.dp)
-            .background(bg, RoundedCornerShape(radius))
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center,
+    // MIUIX 原生 Button（未选中用次级容器色，深色下也有底色）
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(
+            color = if (active) MiuixTheme.colorScheme.primary
+            else MiuixTheme.colorScheme.secondaryContainerVariant,
+            contentColor = if (active) MiuixTheme.colorScheme.onPrimary
+            else MiuixTheme.colorScheme.onSurface,
+        ),
+        cornerRadius = radius,
+        minHeight = 38.dp,
     ) {
         Text(
             text = label,
-            color = fg,
             fontSize = 12.sp,
             fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            softWrap = false,
         )
     }
-
-
 }
 
 /** 悬浮窗底部提示：当前前台应用是否有自动化规则。 */

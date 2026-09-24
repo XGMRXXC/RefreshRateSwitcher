@@ -66,7 +66,8 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
-        <receiver
+        <receiver android:name=".NotificationDismissReceiver" android:exported="false" />
+    <receiver
             android:name=".BootReceiver"
             android:exported="true"
             android:enabled="true"

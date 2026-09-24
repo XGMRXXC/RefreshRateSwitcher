@@ -43,6 +43,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,6 +52,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import top.yukonga.miuix.kmp.basic.NavigationRailValue
+import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.slideOutHorizontally
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
@@ -105,6 +114,11 @@ fun AppRoot() {
     val st = remember { AppState(ctx) }
     val style = UiStyle.of(SwitchService.getUiStyle(ctx))
 
+    // 路由状态放在最外层（不放进 MiuixPopupHost 的内容作用域，也不会随外壳销毁而重置）：
+    // 二级页会整体替换外壳，外壳被销毁重建，但这两个状态必须存活，否则返回后会丢失页签。
+    var themeOpen by remember { mutableStateOf(false) }
+    var shellTab by remember { mutableIntStateOf(0) }
+
     // 打开应用先立刻适配一次（重新枚举主屏 display 0 的挡位、重新检测 root），
     // 之后每秒在 IO 线程刷新（读 sysfs / 调用 su 不能放主线程）
     // 首次进入若未授予悬浮窗权限，直接带用户去系统设置授权（不再使用 root 授权）
@@ -130,7 +144,38 @@ fun AppRoot() {
         UiStyle.MIUIX -> AppTheme {
             ApplySystemBarAppearance()
             // MIUIX 原生下拉弹层需要 NavigationEventDispatcherOwner
-            MiuixPopupHost { MiuixShell(st) }
+            MiuixPopupHost {
+                // 路由层：三个主页 ⟷ 主题设置二级页
+                // 二级页是独立整页（外壳整体让位 → 顶栏/底栏自然消失，无需条件补丁）；
+                // 转场按官方 NavTransitions.MiuixDefault 三特征（全宽滑动 + ¼ 视差 + 变暗）；
+                // 系统返回由 BackHandler 接管（等价于 miuix-nav 的 onBack）。
+                BackHandler(enabled = themeOpen) { themeOpen = false }
+                AnimatedContent(
+                    targetState = themeOpen,
+                    transitionSpec = {
+                        val dur = 320
+                        if (targetState) {
+                            (slideInHorizontally(tween(dur)) { it } + fadeIn(tween(240))) togetherWith
+                                (slideOutHorizontally(tween(dur)) { -it / 4 } + fadeOut(tween(240)))
+                        } else {
+                            (slideInHorizontally(tween(dur)) { -it / 4 } + fadeIn(tween(240))) togetherWith
+                                (slideOutHorizontally(tween(dur)) { it } + fadeOut(tween(240)))
+                        }
+                    },
+                    label = "miuixRoute",
+                ) { open ->
+                    if (open) {
+                        MiuixThemeSettingsScreen(st) { themeOpen = false }
+                    } else {
+                        MiuixShell(
+                            st,
+                            onOpenTheme = { themeOpen = true },
+                            startTab = shellTab,
+                            onTabChange = { shellTab = it },
+                        )
+                    }
+                }
+            }
         }
         UiStyle.M3E -> M3eTheme {
             ApplySystemBarAppearance()
@@ -162,15 +207,28 @@ private fun TabPager(
 // =====================================================================
 
 @Composable
-private fun MiuixShell(st: AppState) {
+private fun MiuixShell(
+    st: AppState,
+    onOpenTheme: () -> Unit,
+    startTab: Int = 0,
+    onTabChange: (Int) -> Unit = {},
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val auto = st.autoEnabled
     var autoQuery by remember { mutableStateOf("") }
     var autoSearching by remember { mutableStateOf(false) }
     val pageCount = if (auto) 3 else 2
-    val pager = rememberPagerState(pageCount = { pageCount })
+    val pager = rememberPagerState(initialPage = startTab.coerceIn(0, pageCount - 1), pageCount = { pageCount })
+    // 页签只在用户点击底栏时记录（见 go）；不要用 LaunchedEffect(pager.currentPage) 自动同步——
+    // 外壳被二级页替换后重建时它会立刻以 0 触发，把刚记录的页签覆盖掉。
+    // 外壳重建时把 pager 对齐到路由层记录的页签
+    LaunchedEffect(Unit) { if (startTab != pager.currentPage) pager.scrollToPage(startTab) }
     val tab = pager.currentPage.coerceAtMost(pageCount - 1)
+    // 官方滚动行为：上划时大标题收起、标题并入顶栏（TopAppBar 原生折叠效果）
+    val scrollBehavior = MiuixScrollBehavior()
+    // 毛玻璃：主题设置里的「模糊」开关控制（官方 layerBackdrop / textureBlur）
+    val backdrop = rememberBlurBackdrop(st.blurEnabled)
     val wide = isWideScreen()
     // 关掉自动化后当前页可能越界，回到最后一页
     LaunchedEffect(pageCount) { if (pager.currentPage > pageCount - 1) pager.scrollToPage(pageCount - 1) }
@@ -185,8 +243,9 @@ private fun MiuixShell(st: AppState) {
     val page: @Composable (Int) -> Unit = { t ->
         when (t) {
             0 -> HomeScreen(st, openOverlay)
-            1 -> if (auto) MiuixAutomationScreen(st, autoQuery) else SettingsScreen(st)
-            else -> SettingsScreen(st)
+            1 -> if (auto) MiuixAutomationScreen(st, autoQuery, autoSearching, { autoSearching = it }, { autoQuery = it })
+            else SettingsScreen(st, onOpenTheme)
+            else -> SettingsScreen(st, onOpenTheme)
         }
     }
     val navItems = if (auto) {
@@ -194,34 +253,30 @@ private fun MiuixShell(st: AppState) {
     } else {
         listOf(HomeIcon to "主页", MiuixIcons.Settings to "设置")
     }
-    val go: (Int) -> Unit = { i -> scope.launch { pager.animateScrollToPage(i) } }
+    val go: (Int) -> Unit = { i -> onTabChange(i); scope.launch { pager.animateScrollToPage(i) } }
 
     // 横屏：侧栏独立占满整列（不被顶栏截断）；竖屏用 Scaffold
     if (wide) {
         // 横屏也用 MiuixScaffold 包一层：SuperDropdown 的原生弹层需要 Scaffold 作为宿主，
         // 否则横屏下 ⌃⌄ 弹不出来
         MiuixScaffold { scaffoldPadding ->
-        Row(
+        // 外层 Box：横屏「悬浮底栏」时，胶囊作为覆盖层浮在内容之上（不占布局宽度）
+        Box(
             Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
                 .background(MiuixTheme.colorScheme.surface),
+
         ) {
-            if (st.bottomBarStyle == BarStyle.FLOATING) {
-                Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .padding(start = 12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    MiuixFloatingNav(navItems, tab, go, vertical = true)
-                }
-            } else {
-                MiuixNavigationRail {
+        Row(Modifier.fillMaxSize()) {
+            if (st.bottomBarStyle != BarStyle.FLOATING) {
+                // 官方可展开侧栏：折叠时只显示图标，选中项文本从图标旁弹出（KernelSU 同款）
+                val railState = rememberNavigationRailState(NavigationRailValue.Collapsed)
+                MiuixNavigationRail(state = railState, modifier = Modifier.barBlur(backdrop)) {
                     navItems.forEachIndexed { i, (icon, label) ->
                         MiuixNavigationRailItem(
                             selected = tab == i,
-                            onClick = { go(i) },
+                            onClick = { Haptics.click(ctx); go(i) },
                             icon = icon,
                             label = label,
                         )
@@ -236,36 +291,14 @@ private fun MiuixShell(st: AppState) {
             ) {
                 Box {
                 Box {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)          // 固定高度：三个页面顶栏高度一致
-                        .padding(start = 16.dp, end = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = if (autoSearching && tab == 1) "" else title,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MiuixTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (autoSearching && tab == 1) {
-                        MiuixAutoSearchField(
-                            query = autoQuery,
-                            onQueryChange = { autoQuery = it },
-                            onClose = { autoQuery = ""; autoSearching = false },
-                        )
-                    } else if (auto && tab == 1) {
-                        MiuixAutoTopActions(
-                            showSystem = st.autoShowSystem,
-                            onSearch = { autoSearching = true },
-                            onToggleSystem = {
-                                AutoRules.setShowSystem(ctx, !st.autoShowSystem)
-                                st.refresh()
-                            },
-                        )
-                    } else if (false) {
+                // KSU 写法：模糊挂在包裹层 BlurredBar 上（TopAppBar 自身不改结构，避免上划时高度抖动）
+                BlurredBar(backdrop) {
+                MiuixTopAppBar(
+                    title = if (autoSearching && tab == 1) "" else title,
+                    scrollBehavior = scrollBehavior,
+                    color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    actions = {
+                    if (auto && tab == 1 && !autoSearching) {
                         MiuixAutoTopActions(
                             showSystem = st.autoShowSystem,
                             onSearch = { autoSearching = true },
@@ -275,36 +308,51 @@ private fun MiuixShell(st: AppState) {
                             },
                         )
                     }
+                    },
+                )
                 }
                 }
                 }
                 Box {
                 Box {
-                    TabPager(pager, Modifier.fillMaxSize()) { page(it) }
-                }
+                    // 官方结构：外层 Box 铺满 + layerBackdrop 作为采样源
+                    Box(Modifier.fillMaxSize().contentBlur(backdrop)) {
+                    TabPager(pager, Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)) { page(it) }
+                    }
+                    // 主题设置：MIUIX 官方 WindowDialog（M3E 外壳同样使用）
+                    if (false) {   // 旧弹层已废弃（二级页改为整页）
+                        top.yukonga.miuix.kmp.window.WindowDialog(
+                            show = true,
+                            onDismissRequest = { },
+                            title = "主题设置",
+                        ) {
+                            M3eThemeSettingsScreen(st) { }
+                        }
+                    }                }
                 }
             }
+        }
+        // 悬浮底栏：左下角浮着的官方胶囊（不占用内容宽度）
+        if (st.bottomBarStyle == BarStyle.FLOATING) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 16.dp),
+            ) {
+                Box(Modifier.barBlur(backdrop)) { MiuixFloatingNav(navItems, tab, go) }
+            }
+        }
         }
         }
     } else {
         MiuixScaffold(
-            topBar = { MiuixSmallTopAppBar(
+            topBar = { BlurredBar(backdrop) { MiuixTopAppBar(
                     title = if (autoSearching && tab == 1) "" else title,
+                    scrollBehavior = scrollBehavior,
+                    color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     actions = {
                         if (auto && tab == 1) {
                             AnimatedVisibility(
-                                visible = autoSearching,
-                                enter = fadeIn(animationSpec = tween(140)) +
-                                    slideInHorizontally(animationSpec = tween(220), initialOffsetX = { it / 3 }),
-                                exit = fadeOut(animationSpec = tween(90)),
-                            ) {
-                                MiuixAutoSearchField(
-                                    query = autoQuery,
-                                    onQueryChange = { autoQuery = it },
-                                        onClose = { autoQuery = ""; autoSearching = false },
-                                    )
-                                }
-                                AnimatedVisibility(
                                     visible = !autoSearching,
                                     enter = fadeIn(animationSpec = tween(150)),
                                     exit = fadeOut(animationSpec = tween(100)),
@@ -321,14 +369,14 @@ private fun MiuixShell(st: AppState) {
                             }
                         },
                     )
-                },
+                } },
             bottomBar = {
                 if (st.bottomBarStyle != BarStyle.FLOATING) {
-                    MiuixNavigationBar {
+                    MiuixNavigationBar(modifier = Modifier.barBlur(backdrop), color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface) {
                         navItems.forEachIndexed { i, (icon, label) ->
                             MiuixNavigationBarItem(
                                 selected = tab == i,
-                                onClick = { go(i) },
+                                onClick = { Haptics.click(ctx); go(i) },
                                 icon = icon,
                                 label = label,
                             )
@@ -337,15 +385,41 @@ private fun MiuixShell(st: AppState) {
                 }
             },
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                TabPager(pager, Modifier.fillMaxSize()) { page(it) }
+            // 官方示例结构：内容层 Box 铺满并挂 layerBackdrop（栏底下才有采样源），
+            // 内层只做 top inset —— 内容会从顶栏/底栏下方穿过。
+            Box(Modifier.fillMaxSize().contentBlur(backdrop)) {
+                TabPager(
+                    pager,
+                    Modifier.fillMaxSize()
+                        .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding())
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                ) { page(it) }
+                // 主题设置：MIUIX 官方 WindowDialog（M3E 外壳同样使用）
+                if (false) {   // 旧弹层已废弃（二级页改为整页）
+                    top.yukonga.miuix.kmp.window.WindowDialog(
+                        show = true,
+                        onDismissRequest = { },
+                        title = "主题设置",
+                    ) {
+                        M3eThemeSettingsScreen(st) { }
+                    }
+                }                // 主题设置：MIUIX 官方 WindowDialog（自带进出场动画）
+                if (false) {   // 旧弹层已废弃（二级页改为整页）
+                    top.yukonga.miuix.kmp.window.WindowDialog(
+                        show = true,
+                        onDismissRequest = { },
+                        title = "主题设置",
+                    ) {
+                        MiuixThemeSettingsScreen(st) { }
+                    }
+                }
                 if (st.bottomBarStyle == BarStyle.FLOATING) {
                     Box(
                         Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 12.dp),
                     ) {
-                        MiuixFloatingNav(navItems, tab, go)
+                        Box(Modifier.barBlur(backdrop)) { MiuixFloatingNav(navItems, tab, go) }
                     }
                 }
             }
@@ -365,9 +439,18 @@ private fun M3eShell(st: AppState) {
     val auto = st.autoEnabled
     var autoQuery by remember { mutableStateOf("") }
     var autoSearching by remember { mutableStateOf(false) }
+    var themeOpen by remember { mutableStateOf(false) }   // 主题设置二级页
+
+    // 二级页 = 独立整页：整体替换掉外壳（顶栏/底栏随之消失，无需条件补丁）
+    if (themeOpen) {
+        M3eThemeSettingsScreen(st) { themeOpen = false }
+        return
+    }
     val pageCount = if (auto) 3 else 2
     val pager = rememberPagerState(pageCount = { pageCount })
     val tab = pager.currentPage.coerceAtMost(pageCount - 1)
+    // 官方滚动行为：上划时大标题收起、标题并入顶栏（TopAppBar 原生折叠效果）
+    val scrollBehavior = MiuixScrollBehavior()
     val wide = isWideScreen()
     LaunchedEffect(pageCount) { if (pager.currentPage > pageCount - 1) pager.scrollToPage(pageCount - 1) }
     val title = when (tab) {
@@ -386,8 +469,9 @@ private fun M3eShell(st: AppState) {
     val page: @Composable (Int) -> Unit = { t ->
         when (t) {
             0 -> M3eHomeScreen(st, openOverlay)
-            1 -> if (auto) M3eAutomationScreen(st, autoQuery) else M3eSettingsScreen(st)
-            else -> M3eSettingsScreen(st)
+            1 -> if (auto) M3eAutomationScreen(st, autoQuery)
+            else M3eSettingsScreen(st) { themeOpen = true }
+            else -> M3eSettingsScreen(st) { themeOpen = true }
         }
     }
     val navItems = if (auto) {
@@ -422,7 +506,7 @@ private fun M3eShell(st: AppState) {
                     navItems.forEachIndexed { i, (icon, label) ->
                         M3NavigationRailItem(
                             selected = tab == i,
-                            onClick = { go(i) },
+                            onClick = { Haptics.click(ctx); go(i) },
                             icon = { Icon(icon, contentDescription = null) },
                             label = { Text(label) },
                         )
@@ -463,8 +547,17 @@ private fun M3eShell(st: AppState) {
                 },
             )
                 Box {
-                    TabPager(pager, Modifier.fillMaxSize()) { page(it) }
-                }
+                    TabPager(pager, Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)) { page(it) }
+                    // 主题设置：MIUIX 官方 WindowDialog（M3E 外壳同样使用）
+                    if (false) {   // 旧弹层已废弃（二级页改为整页）
+                        top.yukonga.miuix.kmp.window.WindowDialog(
+                            show = true,
+                            onDismissRequest = { themeOpen = false },
+                            title = "主题设置",
+                        ) {
+                            M3eThemeSettingsScreen(st) { themeOpen = false }
+                        }
+                    }                }
             }
         }
     } else {
@@ -501,8 +594,17 @@ private fun M3eShell(st: AppState) {
                 },
             )
                 Box {
-                    TabPager(pager, Modifier.fillMaxSize()) { page(it) }
-                }
+                    TabPager(pager, Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection)) { page(it) }
+                    // 主题设置：MIUIX 官方 WindowDialog（M3E 外壳同样使用）
+                    if (false) {   // 旧弹层已废弃（二级页改为整页）
+                        top.yukonga.miuix.kmp.window.WindowDialog(
+                            show = true,
+                            onDismissRequest = { themeOpen = false },
+                            title = "主题设置",
+                        ) {
+                            M3eThemeSettingsScreen(st) { themeOpen = false }
+                        }
+                    }                }
             }
             if (floating) {
                 Box(
@@ -526,7 +628,7 @@ private fun M3eShell(st: AppState) {
                         navItems.forEachIndexed { i, (icon, label) ->
                             M3NavigationBarItem(
                                 selected = tab == i,
-                                onClick = { go(i) },
+                                onClick = { Haptics.click(ctx); go(i) },
                                 icon = { Icon(icon, contentDescription = null) },
                                 label = { Text(label) },
                             )
@@ -537,4 +639,3 @@ private fun M3eShell(st: AppState) {
         }
     }
 }
-

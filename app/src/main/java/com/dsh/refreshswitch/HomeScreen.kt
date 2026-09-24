@@ -21,8 +21,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.CircleShape
@@ -46,6 +44,9 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.mutableStateOf
 import top.yukonga.miuix.kmp.icon.basic.Check
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -66,24 +67,28 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 主页：当前刷新率 + 锁定 + 挡位 + 快捷操作。 */
 @Composable
-fun HomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
+fun HomeScreen(st: AppState, onOpenOverlay: () -> Unit, inset: PaddingValues = PaddingValues(0.dp), scrollMod: Modifier = Modifier) {
     val ctx = LocalContext.current
     val view = LocalView.current
     val scope = rememberCoroutineScope()
-    val scroll = rememberScrollState()
     val t = LocalStyleTokens.current
 
     fun asyncRefresh() {
         scope.launch { withContext(Dispatchers.IO) { st.refresh() } }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
+    // 根容器照 KernelSU：LazyColumn（尺寸自管理 → 永远可滚动）；
+    // 让位用 contentPadding（随内容滚动），页面内容整体作为单个 item。
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxHeight()
             .padding(horizontal = 12.dp),
+        contentPadding = inset,
     ) {
-        Spacer(Modifier.height(4.dp))
+        item {
+        Column(
+            Modifier.fillMaxWidth(),
+        ) {
 
         // ---------- hero 卡：MIUIX 浅绿卡 + 大号水印 + Tilt 3D 按压 ----------
         Card(
@@ -188,10 +193,6 @@ fun HomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
             )
         }
 
-
-
-
-
         Spacer(Modifier.height(6.dp))
 
         // ---------- 挡位 ----------
@@ -256,9 +257,9 @@ fun HomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
             InfoRow("屏幕密度", if (st.screen.densityDpi > 0) "${st.screen.densityDpi} dpi" else "—")
         }
 
-
-
         Spacer(Modifier.height(24.dp))
+        }
+        }
     }
 }
 
@@ -273,13 +274,16 @@ private fun ModeChip(
     onClick: () -> Unit,
 ) {
     val accent = MiuixTheme.colorScheme.primary
-    val bg = if (active) accent else MiuixTheme.colorScheme.surfaceContainerHigh
-    val fg = if (active) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.onSurface
+    // 未选中用 MIUIX 的「次级容器色」，深色模式下也有明确底色（不用描边）
+    val unselectedBg = MiuixTheme.colorScheme.secondaryContainerVariant
+    val unselectedFg = MiuixTheme.colorScheme.onSurface
+    val bg = if (active) accent else unselectedBg
+    val fg = if (active) MiuixTheme.colorScheme.onPrimary else unselectedFg
     Box(
         modifier = modifier
             .height(46.dp)
             .background(bg, RoundedCornerShape(radius))
-            .clickable { onClick() },
+                        .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -356,64 +360,26 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
-/** 主页「控制屏幕」选择行（仅多屏设备显示）：点开选择要调节的 display。 */
+/** 主页「控制屏幕」选择行（仅多屏设备显示）：改用 MIUIX 官方 WindowDropdownPreference。 */
 @Composable
 private fun DisplayPickerRow(st: AppState) {
     val ctx = LocalContext.current
-    val view = LocalView.current
-    var expanded by remember { mutableStateOf(false) }
     val current = st.displays.firstOrNull { it.id == st.targetDisplay } ?: st.displays.firstOrNull()
+    val labels = st.displays.map { it.label() }
+    val selectedIndex = st.displays.indexOfFirst { it.id == st.targetDisplay }.coerceAtLeast(0)
 
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable { Haptics.click(view); expanded = true }
-            .padding(horizontal = 16.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "控制屏幕",
-            fontSize = 14.sp,
-            color = MiuixTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = current?.label() ?: "—",
-            fontSize = 14.sp,
-            color = MiuixTheme.colorScheme.primary,
-        )
-        MiuixDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            st.displays.forEach { d ->
-                val selected = d.id == st.targetDisplay
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = d.label(),
-                            fontSize = 14.sp,
-                            color = if (selected) MiuixTheme.colorScheme.primary
-                            else MiuixTheme.colorScheme.onSurface,
-                        )
-                    },
-                    trailingIcon = {
-                        if (selected) {
-                            Icon(
-                                imageVector = MiuixIcons.Basic.Check,
-                                contentDescription = null,
-                                tint = MiuixTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    },
-                    onClick = {
-                        Haptics.tick(view)
-                        expanded = false
-                        SwitchService.setTargetDisplay(ctx, d.id)
-                        ScreenInfo.invalidate()
-                        toast(ctx, "已切到 " + d.label())
-                        st.refresh()
-                    },
-                )
-            }
-        }
-    }
+    WindowDropdownPreference(
+        items = labels,
+        selectedIndex = selectedIndex,
+        title = "控制屏幕",
+        summary = current?.label() ?: "—",
+        showValue = false,
+        onSelectedIndexChange = { index ->
+            val d = st.displays.getOrNull(index) ?: return@WindowDropdownPreference
+            SwitchService.setTargetDisplay(ctx, d.id)
+            ScreenInfo.invalidate()
+            toast(ctx, "已切到 " + d.label())
+            st.refresh()
+        },
+    )
 }

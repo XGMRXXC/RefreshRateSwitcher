@@ -15,8 +15,8 @@ android {
         applicationId = "com.dsh.refreshswitch"
         minSdk = 33
         targetSdk = 36
-        versionCode = 4220
-        versionName = "4.2.2"
+        versionCode = 4242
+        versionName = "4.2.1.8"
     }
 
     signingConfigs {

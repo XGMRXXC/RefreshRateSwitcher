@@ -54,6 +54,8 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.Alignment
 import top.yukonga.miuix.kmp.icon.extended.Forward
+import androidx.compose.ui.draw.rotate
+import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -632,7 +634,7 @@ fun M3eHomeScreen(st: AppState, onOpenOverlay: () -> Unit) {
 
 /** M3E 设置页。 */
 @Composable
-fun M3eSettingsScreen(st: AppState) {
+fun M3eSettingsScreen(st: AppState, onOpenTheme: () -> Unit = {}) {
     val ctx = LocalContext.current
     val view = LocalView.current
     val refresh = m3eAsyncRefresh(st)
@@ -649,24 +651,15 @@ fun M3eSettingsScreen(st: AppState) {
 
         M3eCard {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 2.dp)) {
-                M3ePickerRow(
-                    title = "界面风格",
-                    value = style.label,
-                    options = UiStyle.entries.map { it.label },
-                    selectedIndex = style.id,
-                ) { index ->
-                    SwitchService.setUiStyle(ctx, index)
-                    (ctx as? Activity)?.recreate()
-                }
-                M3ePickerRow(
-                    title = "底栏样式",
-                    value = BarStyle.labels.getOrElse(st.bottomBarStyle) { BarStyle.labels[0] },
-                    options = BarStyle.labels,
-                    selectedIndex = st.bottomBarStyle,
-                ) { index ->
-                    SwitchService.setBottomBarStyle(ctx, index)
-                    refresh()
-                }
+                M3eRow(
+                    icon = MiuixIcons.Tune,
+                    title = "主题设置",
+                    subtitle = style.label + " · " + BarStyle.labels.getOrElse(st.bottomBarStyle) { BarStyle.labels[0] },
+                    onClick = {
+                        Haptics.click(view)
+                        onOpenTheme()
+                    },
+                )
             }
         }
 
@@ -758,7 +751,7 @@ fun M3eSettingsScreen(st: AppState) {
                 subtitle = if (st.overlayGranted) "已开启，通知点击直接弹出悬浮面板" else "未开启，将降级为对话框面板",
                 trailing = {
                     TextButton(onClick = {
-                        SysActions.openOverlaySettings(ctx)
+                        if (ModeUtil.hasRoot() && ModeUtil.grantOverlay()) toast(ctx, "已通过 root 授予") else SysActions.openOverlaySettings(ctx)
                         refresh()
                     }) { Text(if (st.overlayGranted) "已开启" else "去开启") }
                 },
@@ -801,7 +794,7 @@ fun M3eSettingsScreen(st: AppState) {
         }
 
         M3eCard {
-            M3eRow(MiuixIcons.Info, "版本", "4.2.2")
+            M3eRow(MiuixIcons.Info, "版本", "4.2.4")
             M3eRow(
                 if (st.root) MiuixIcons.Lock else MiuixIcons.Unlock,
                 "root",
@@ -1066,4 +1059,71 @@ private fun rememberForegroundRuleText(): String {
         }
     }
     return text
+}
+
+/** M3E 主题设置（二级界面）。 */
+@Composable
+fun M3eThemeSettingsScreen(st: AppState, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val view = LocalView.current
+    val refresh = m3eAsyncRefresh(st)
+    val style = UiStyle.of(SwitchService.getUiStyle(ctx))
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Spacer(Modifier.height(2.dp))
+        M3eCard {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 2.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 4.dp, top = 10.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    top.yukonga.miuix.kmp.basic.IconButton(
+                        onClick = { Haptics.click(view); onBack() },
+                        cornerRadius = 20.dp,
+                        minWidth = 40.dp,
+                        minHeight = 40.dp,
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Basic.ArrowRight,
+                            contentDescription = "返回",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp).rotate(180f),
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "主题设置",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                M3ePickerRow(
+                    title = "界面风格",
+                    value = style.label,
+                    options = UiStyle.entries.map { it.label },
+                    selectedIndex = style.id,
+                ) { index ->
+                    SwitchService.setUiStyle(ctx, index)
+                    (ctx as? Activity)?.recreate()
+                }
+                M3ePickerRow(
+                    title = "底栏样式",
+                    value = BarStyle.labels.getOrElse(st.bottomBarStyle) { BarStyle.labels[0] },
+                    options = BarStyle.labels,
+                    selectedIndex = st.bottomBarStyle,
+                ) { index ->
+                    SwitchService.setBottomBarStyle(ctx, index)
+                    refresh()
+                }
+            }
+        }
+        Spacer(Modifier.height(96.dp))
+    }
 }

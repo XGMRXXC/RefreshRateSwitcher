@@ -37,6 +37,12 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.Alignment
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
+import top.yukonga.miuix.kmp.basic.NavigationRail
+import top.yukonga.miuix.kmp.basic.NavigationRailItem
+import top.yukonga.miuix.kmp.basic.NavigationRailValue
+import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -62,7 +68,10 @@ object BarStyle {
     val labels = listOf("标准", "悬浮底栏")
 }
 
-/** MIUIX 悬浮底栏（胶囊浮在内容之上）。 */
+/**
+ * MIUIX 悬浮底栏 —— 使用**官方 API** `FloatingNavigationBar` + `FloatingNavigationBarItem`
+ * （横屏时退化为官方 `NavigationRail`，因为官方悬浮栏只支持水平方向）。
+ */
 @Composable
 fun MiuixFloatingNav(
     items: List<Pair<ImageVector, String>>,
@@ -71,63 +80,38 @@ fun MiuixFloatingNav(
     vertical: Boolean = false,
 ) {
     val view = LocalView.current
-    val shape = RoundedCornerShape(28.dp)
-    Box(
-        Modifier
-            .shadow(6.dp, shape)
-            .clip(shape)
-            .background(MiuixTheme.colorScheme.surfaceContainer),
+    if (vertical) {
+        // 官方可展开侧栏（折叠 + 选中项文本弹出）
+        val railState = rememberNavigationRailState(NavigationRailValue.Collapsed)
+        NavigationRail(state = railState) {
+            items.forEachIndexed { i, (icon, label) ->
+                NavigationRailItem(
+                    selected = i == selected,
+                    onClick = { Haptics.click(view); onSelect(i) },
+                    icon = icon,
+                    label = label,
+                )
+            }
+        }
+        return
+    }
+    FloatingNavigationBar(
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (vertical) {
-            Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items.forEachIndexed { i, (icon, label) ->
-                    MiuixNavPill(icon, label, i == selected, 74.dp) {
-                        Haptics.click(view)
-                        onSelect(i)
-                    }
-                }
-            }
-        } else {
-            Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                items.forEachIndexed { i, (icon, label) ->
-                    MiuixNavPill(icon, label, i == selected, 74.dp) {
-                        Haptics.click(view)
-                        onSelect(i)
-                    }
-                }
-            }
+        items.forEachIndexed { i, (icon, label) ->
+            FloatingNavigationBarItem(
+                selected = i == selected,
+                onClick = {
+                    Haptics.click(view)
+                    onSelect(i)
+                },
+                icon = icon,
+                label = label,
+            )
         }
     }
 }
 
-@Composable
-private fun MiuixNavPill(
-    icon: ImageVector,
-    label: String,
-    selected: Boolean,
-    width: Dp,
-    onClick: () -> Unit,
-) {
-    val bg by animateColorAsState(
-        targetValue = if (selected) MiuixTheme.colorScheme.primaryContainer else Color.Transparent,
-        label = "miuixNavPill",
-    )
-    val fg = if (selected) MiuixTheme.colorScheme.onPrimaryContainer
-    else MiuixTheme.colorScheme.onBackgroundVariant
-    Column(
-        modifier = Modifier
-            .width(width)
-            .clip(RoundedCornerShape(20.dp))
-            .background(bg)
-            .clickable { onClick() }
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icon, contentDescription = label, tint = fg, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(2.dp))
-        Text(label, fontSize = 10.sp, color = fg, maxLines = 1, textAlign = TextAlign.Center)
-    }
-}
 
 /** MIUIX 单选行：直接用 MIUIX 原生 SuperDropdown（行 + ⌃⌄ + 原生 popup）。 */
 @Composable

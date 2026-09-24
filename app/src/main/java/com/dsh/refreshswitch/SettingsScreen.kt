@@ -24,6 +24,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.rotate
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.basic.ArrowRight
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -44,7 +53,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 设置页：界面风格 / 通知 / 界面显示 / 权限与守护 / 关于。 */
 @Composable
-fun SettingsScreen(st: AppState) {
+fun SettingsScreen(st: AppState, onOpenTheme: () -> Unit = {}, inset: PaddingValues = PaddingValues(0.dp), scrollMod: Modifier = Modifier) {
     val ctx = LocalContext.current
     val view = LocalView.current
     val scope = rememberCoroutineScope()
@@ -55,37 +64,32 @@ fun SettingsScreen(st: AppState) {
         scope.launch { withContext(Dispatchers.IO) { st.refresh() } }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+    // 根容器照 KernelSU：LazyColumn（尺寸自管理 → 永远可滚动）；
+    // 让位用 contentPadding（随内容滚动），页面内容整体作为单个 item。
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxHeight()
             .padding(horizontal = 12.dp),
+        contentPadding = inset,
     ) {
-        Spacer(Modifier.height(4.dp))
+        item {
+        Column(
+            Modifier.fillMaxWidth(),
+        ) {
 
-        // ---------------- 界面与底栏 ----------------
+        // ---------------- 界面 ----------------
         SmallTitle("界面")
         Card(cornerRadius = t.cardRadius) {
-            // 让 MIUIX 组件自己撑满卡片（自带 insideMargin），否则按压高亮会被内缩、与卡片圆角对不上
             Column(Modifier.clip(RoundedCornerShape(t.cardRadius))) {
-                MiuixPickerRow(
-                    title = "界面风格",
-                    value = style.label,
-                    options = UiStyle.entries.map { it.label },
-                    selectedIndex = style.id,
-                ) { index ->
-                    SwitchService.setUiStyle(ctx, index)
-                    (ctx as? android.app.Activity)?.recreate()
-                }
-                MiuixPickerRow(
-                    title = "底栏样式",
-                    value = BarStyle.labels.getOrElse(st.bottomBarStyle) { BarStyle.labels[0] },
-                    options = BarStyle.labels,
-                    selectedIndex = st.bottomBarStyle,
-                ) { index ->
-                    SwitchService.setBottomBarStyle(ctx, index)
-                    asyncRefresh()
-                }
+                // 主题相关设置已独立成二级页，便于后续继续扩展
+                top.yukonga.miuix.kmp.basic.BasicComponent(
+                    title = "主题设置",
+                    summary = style.label + " · " + BarStyle.labels.getOrElse(st.bottomBarStyle) { BarStyle.labels[0] },
+                    onClick = {
+                        Haptics.click(view)
+                        onOpenTheme()
+                    },
+                )
             }
         }
         // ---------------- 通知 ----------------
@@ -129,6 +133,23 @@ fun SettingsScreen(st: AppState) {
                 },
                 title = "Toast 提示",
                 summary = if (st.toastEnabled) "显示全部操作提示" else "已关闭，所有 toast 都不再弹出",
+            )
+            SuperSwitch(
+                checked = st.resendEnabled,
+                onCheckedChange = { on ->
+                    Haptics.click(view)
+                    SwitchService.setResendEnabled(ctx, on)
+                    if (on) {
+                        // 打开时立即重发一次，让用户马上看到效果
+                        SwitchService.resendNotification(ctx)
+                        toast(ctx, "已重发一次通知，之后被关闭会自动重发")
+                    } else {
+                        toast(ctx, "已关闭自动重发")
+                    }
+                    asyncRefresh()
+                },
+                title = "通知被关闭后自动重发",
+                summary = "手动划掉常驻通知后，自动重新发出来，避免守护状态丢失",
             )
             BasicComponent(
                 title = "守护状态",
@@ -177,7 +198,12 @@ fun SettingsScreen(st: AppState) {
                 summary = if (st.overlayGranted) "已开启，通知点击直接弹出悬浮面板" else "未开启，将降级为对话框面板",
                 action = if (st.overlayGranted) "已开启" else "去开启",
             ) {
-                SysActions.openOverlaySettings(ctx)
+                if (ModeUtil.hasRoot() && ModeUtil.grantOverlay()) {
+                        toast(ctx, "已通过 root 授予")
+                        st.refresh()
+                    } else {
+                        SysActions.openOverlaySettings(ctx)
+                    }
                 asyncRefresh()
             }
             ActionRow(
@@ -209,7 +235,7 @@ fun SettingsScreen(st: AppState) {
         // ---------------- 关于 ----------------
         SmallTitle("关于")
         Card(cornerRadius = t.cardRadius) {
-            BasicComponent(title = "版本", summary = "4.2.2")
+            BasicComponent(title = "版本", summary = "4.2.1.8")
             BasicComponent(
                 title = "root",
                 summary = when {
@@ -229,6 +255,8 @@ fun SettingsScreen(st: AppState) {
             )
         }
         Spacer(Modifier.height(24.dp))
+        }
+        }
     }
 }
 
@@ -333,6 +361,94 @@ object SysActions {
             ctx.startActivity(i)
         } catch (t: Throwable) {
             toast(ctx, "请开启自启动")
+        }
+    }
+}
+
+// =====================================================================
+// 主题设置（二级界面）
+// =====================================================================
+
+/**
+ * 主题设置页（二级）：用 MIUIX **官方 `Scaffold` + `TopAppBar`** 承载，
+ * 与 KernelSU 的二级页结构一致（原生大标题 + 左上角返回）。
+ */
+@Composable
+fun MiuixThemeSettingsScreen(st: AppState, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
+    val t = LocalStyleTokens.current
+    val style = UiStyle.of(SwitchService.getUiStyle(ctx))
+
+    fun asyncRefresh() {
+        scope.launch { withContext(Dispatchers.IO) { st.refresh() } }
+    }
+
+    top.yukonga.miuix.kmp.basic.Scaffold(
+        topBar = {
+            top.yukonga.miuix.kmp.basic.TopAppBar(
+                title = "主题设置",
+                navigationIcon = {
+                    top.yukonga.miuix.kmp.basic.IconButton(
+                        onClick = { Haptics.click(view); onBack() },
+                        cornerRadius = 20.dp,
+                        minWidth = 40.dp,
+                        minHeight = 40.dp,
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Basic.ArrowRight,
+                            contentDescription = "返回",
+                            tint = MiuixTheme.colorScheme.onBackground,
+                            modifier = Modifier.size(22.dp).rotate(180f),
+                        )
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+
+            .verticalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp),
+        ) {
+
+        Spacer(Modifier.height(4.dp))
+            SmallTitle("主题")
+            Card(cornerRadius = t.cardRadius) {
+                Column(Modifier.clip(RoundedCornerShape(t.cardRadius))) {
+                    MiuixPickerRow(
+                        title = "界面风格",
+                        value = style.label,
+                        options = UiStyle.entries.map { it.label },
+                        selectedIndex = style.id,
+                    ) { index ->
+                        SwitchService.setUiStyle(ctx, index)
+                        (ctx as? android.app.Activity)?.recreate()
+                    }
+                    MiuixPickerRow(
+                        title = "底栏样式",
+                        value = BarStyle.labels.getOrElse(st.bottomBarStyle) { BarStyle.labels[0] },
+                        options = BarStyle.labels,
+                        selectedIndex = st.bottomBarStyle,
+                    ) { index ->
+                        SwitchService.setBottomBarStyle(ctx, index)
+                        asyncRefresh()
+                    }
+                    // 模糊：本机 GPU 在 RenderThread 会段错误（设备级限制）→ 先禁止开启并标注「正在完善」
+                    SuperSwitch(
+                        title = "模糊",
+                        summary = "正在完善，暂不可用",
+                        checked = false,
+                        enabled = false,
+                        onCheckedChange = { },
+                    )
+                }
+            }
+            Spacer(Modifier.height(96.dp))
         }
     }
 }

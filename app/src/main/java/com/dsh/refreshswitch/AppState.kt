@@ -20,6 +20,8 @@ class AppState(private val ctx: Context) {
     var bottomBarStyle by mutableIntStateOf(SwitchService.getBottomBarStyle(ctx))
     var autoEnabled by mutableStateOf(AutoRules.isEnabled(ctx))
     var autoShowSystem by mutableStateOf(AutoRules.isShowSystem(ctx))
+    var blurEnabled by mutableStateOf(SwitchService.isBlur(ctx))
+    var resendEnabled by mutableStateOf(SwitchService.isResendEnabled(ctx))
     var screen by mutableStateOf(ScreenInfo.read(ctx))
     var displays by mutableStateOf(ScreenInfo.displayList(ctx))
     var targetDisplay by mutableIntStateOf(SwitchService.getTargetDisplay(ctx))
@@ -87,6 +89,10 @@ class AppState(private val ctx: Context) {
         if (ae != autoEnabled) autoEnabled = ae
         val asys = AutoRules.isShowSystem(ctx)
         if (asys != autoShowSystem) autoShowSystem = asys
+        val rs = SwitchService.isResendEnabled(ctx)
+        if (rs != resendEnabled) resendEnabled = rs
+        val bl = SwitchService.isBlur(ctx)
+        if (bl != blurEnabled) blurEnabled = bl
         // 屏幕信息 / LTPO 判定（内部有 3 秒缓存）
         val si = ScreenInfo.read(ctx)
         if (si.renderFps != screen.renderFps || si.modeFps != screen.modeFps || si.arr != screen.arr) screen = si
